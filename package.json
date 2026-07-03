@@ -1,0 +1,13 @@
+{
+  "name": "cute-agent",
+  "version": "0.1.0",
+  "description": "A desktop pet that roams around your macOS screen",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

@@ -1,0 +1,296 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---- Body: glossy two-tone dome, modeled after cute slime sticker art ----
+   ---- (no pupils, line-art faces) ---- */
+
+#blob {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 78px;
+  height: 62px;
+  background: #bfe8fb;
+  border-radius: 50% 50% 46% 46% / 70% 70% 30% 30%;
+  box-shadow:
+    0 10px 16px rgba(20, 60, 100, 0.28),
+    inset 0 -20px 18px rgba(60, 145, 205, 0.55),
+    inset 0 3px 6px rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  will-change: transform;
+  cursor: grab;
+}
+
+#blob.dragging {
+  cursor: grabbing;
+}
+
+#blob .highlight {
+  position: absolute;
+  top: 10%;
+  left: 14%;
+  width: 36%;
+  height: 24%;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  transform: rotate(-20deg);
+  pointer-events: none;
+}
+
+#blob .highlight-2 {
+  position: absolute;
+  top: 32%;
+  left: 10%;
+  width: 9%;
+  height: 9%;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* ---- Face parts: pure line-art, no filled pupils. Default = neutral. ---- */
+
+.eye {
+  position: absolute;
+  top: 44%;
+  width: 15px;
+  height: 3px;
+  background: #1c3b5a;
+  border-radius: 2px;
+}
+
+.eye.left {
+  left: 21%;
+  transform: rotate(-6deg);
+}
+
+.eye.right {
+  left: 60%;
+  transform: rotate(6deg);
+}
+
+.eye.blink {
+  transform: scaleY(0.15) !important;
+}
+
+.mouth {
+  position: absolute;
+  top: 62%;
+  left: 44%;
+  width: 9px;
+  height: 9px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.blush {
+  position: absolute;
+  top: 52%;
+  width: 12px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f7a8c4;
+  opacity: 0;
+  overflow: hidden;
+  transition: opacity 0.2s ease;
+}
+
+.blush.left {
+  left: 11%;
+}
+
+.blush.right {
+  left: 75%;
+}
+
+.blush.show {
+  opacity: 0.55;
+}
+
+.blush.hatch.show {
+  opacity: 0.85;
+}
+
+.blush.hatch::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    100deg,
+    rgba(35, 20, 50, 0.55) 0,
+    rgba(35, 20, 50, 0.55) 1px,
+    transparent 1px,
+    transparent 3.5px
+  );
+}
+
+/* ---- Emotions (eyes/mouth per mood, matching the slime sticker reference) ---- */
+
+/* Shared "arc eye" shape used by several emotions below — height/border-side
+   and rotation still vary per emotion, so each rule overrides those only. */
+#blob.emo-happy .eye,
+#blob.emo-curious .eye.left,
+#blob.emo-sleepy .eye,
+#blob.emo-blush .eye {
+  background: transparent;
+  border-radius: 50%;
+}
+
+/* happy: content, gently arched closed eyes + hatched blush */
+#blob.emo-happy .eye {
+  width: 17px;
+  height: 8px;
+  border-top: 2.5px solid #1c3b5a;
+}
+#blob.emo-happy .eye.left {
+  transform: rotate(-8deg);
+}
+#blob.emo-happy .eye.right {
+  transform: rotate(10deg);
+}
+
+/* curious: one brow-eye raised and arched, the other a calm dash */
+#blob.emo-curious .eye.left {
+  width: 15px;
+  height: 8px;
+  border-top: 2.5px solid #1c3b5a;
+  transform: rotate(-12deg) translateY(-2px);
+}
+#blob.emo-curious .eye.right {
+  transform: rotate(4deg);
+}
+
+/* surprised: wide open ring eyes, small round mouth */
+#blob.emo-surprised .eye {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+  border: 2.5px solid #1c3b5a;
+  border-radius: 50%;
+  transform: none;
+}
+#blob.emo-surprised .mouth {
+  opacity: 1;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #1c3b5a;
+}
+
+/* sleepy: eyes droop outward and down, tiny chevron mouth */
+#blob.emo-sleepy .eye {
+  width: 16px;
+  height: 8px;
+  border-top: 2.5px solid #1c3b5a;
+}
+#blob.emo-sleepy .eye.left {
+  transform: rotate(14deg);
+}
+#blob.emo-sleepy .eye.right {
+  transform: rotate(-14deg);
+}
+#blob.emo-sleepy .mouth {
+  opacity: 1;
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid #1c3b5a;
+  border-radius: 50%;
+  transform: scale(0.75);
+}
+
+/* thinking: soft downward-angled lines meeting near the middle */
+#blob.emo-thinking .eye {
+  width: 15px;
+  height: 3px;
+  border-radius: 2px;
+}
+#blob.emo-thinking .eye.left {
+  transform: rotate(16deg);
+  transform-origin: right center;
+}
+#blob.emo-thinking .eye.right {
+  transform: rotate(-16deg);
+  transform-origin: left center;
+}
+
+/* annoyed: sharp lines converging to a point, like a v-shaped scowl */
+#blob.emo-annoyed .eye {
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+}
+#blob.emo-annoyed .eye.left {
+  transform: rotate(24deg);
+  transform-origin: right center;
+}
+#blob.emo-annoyed .eye.right {
+  transform: rotate(-24deg);
+  transform-origin: left center;
+}
+
+/* blush: raised, worried-looking eyes with hatched blush */
+#blob.emo-blush .eye {
+  width: 16px;
+  height: 8px;
+  border-bottom: 2.5px solid #1c3b5a;
+}
+#blob.emo-blush .eye.left {
+  transform: rotate(-16deg) translateY(-3px);
+}
+#blob.emo-blush .eye.right {
+  transform: rotate(16deg) translateY(-3px);
+}
+
+/* ---- Floating emotion bubble ---- */
+
+#bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.bubble-text {
+  display: inline-block;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.bubble-text.show {
+  animation: bubble-pop 1.1s ease-out;
+}
+
+@keyframes bubble-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.05);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.9);
+  }
+}
