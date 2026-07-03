@@ -2,3 +2,9 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# native (Swift/AppKit)
+native/.build/
+native/build/
+native/*.app
+.swiftpm/
