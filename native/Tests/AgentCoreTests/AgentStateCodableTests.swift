@@ -1,0 +1,104 @@
+import Testing
+import Foundation
+@testable import AgentCore
+
+// AgentState is the round's centerpiece: a Codable struct that is both the render
+// source-of-truth today and, by design, shaped as a future LLM/agent brain's context
+// object — even though nothing consumes it that way yet. These tests exist to prove
+// that "serializable brain context" claim, not just exercise Codable mechanically.
+struct AgentStateCodableTests {
+
+    static func populatedState() -> AgentState {
+        AgentState(
+            world: AgentWorld(
+                screenBounds: Size(width: 1920, height: 1080),
+                cursor: Point(x: 400, y: 300),
+                frontmostApp: AppInfo(bundleIdentifier: "com.apple.Terminal", name: "Terminal"),
+                windowBelow: nil
+            ),
+            body: AgentBody(
+                position: Point(x: 100, y: 200),
+                mode: .wander,
+                target: Point(x: 500, y: 600),
+                moving: true,
+                emotion: .curious,
+                dragging: false,
+                dragOffset: Vector(dx: 0, dy: 0),
+                size: Size(width: 78, height: 62)
+            ),
+            memory: AgentMemory(
+                modeEndsAt: 12_345,
+                happyUntil: 0,
+                happyResumeMode: .idle,
+                pendingReturn: false,
+                nextBlinkAt: 15_000,
+                blinking: false,
+                blinkEndsAt: 0,
+                quirkEmotion: nil,
+                quirkUntil: 0,
+                nextQuirkAt: 20_000,
+                proximityUntil: 0,
+                proximityCooldownUntil: 0
+            ),
+            context: ["lastGreeting": .string("hello"), "interactionCount": .number(3)]
+        )
+    }
+
+    @Test func agentState_roundTripsThroughJSON_preservingAllFields() throws {
+        let original = Self.populatedState()
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AgentState.self, from: data)
+        #expect(decoded == original)
+    }
+
+    @Test func agentState_windowBelow_isReservedAndOmittedWhenNil() throws {
+        let state = Self.populatedState()
+        #expect(state.world.windowBelow == nil)
+
+        // Swift's synthesized Codable uses encodeIfPresent for Optional properties, so
+        // a nil windowBelow drops the key entirely rather than emitting JSON null.
+        let data = try JSONEncoder().encode(state)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let world = json?["world"] as? [String: Any]
+        #expect(world?["windowBelow"] == nil)
+
+        // And it still decodes back to nil, so "reserved and unpopulated" round-trips.
+        let decoded = try JSONDecoder().decode(AgentState.self, from: data)
+        #expect(decoded.world.windowBelow == nil)
+    }
+
+    @Test func mode_isStringBacked_forHumanAndLLMLegibleJSON() throws {
+        let data = try JSONEncoder().encode(Mode.wander)
+        let string = String(data: data, encoding: .utf8)
+        #expect(string == "\"wander\"")
+    }
+
+    @Test func emotion_isStringBacked_forHumanAndLLMLegibleJSON() throws {
+        let data = try JSONEncoder().encode(Emotion.curious)
+        let string = String(data: data, encoding: .utf8)
+        #expect(string == "\"curious\"")
+    }
+
+    @Test func jsonValue_roundTripsAllCases() throws {
+        let values: [JSONValue] = [
+            .string("hello"),
+            .number(3.5),
+            .bool(true),
+            .null,
+            .array([.string("a"), .number(1)]),
+            .object(["k": .string("v")]),
+        ]
+        for value in values {
+            let data = try JSONEncoder().encode(value)
+            let decoded = try JSONDecoder().decode(JSONValue.self, from: data)
+            #expect(decoded == value)
+        }
+    }
+
+    @Test func snapshotJSON_containsWorldBodyMemoryContextKeys() throws {
+        let json = try Self.populatedState().snapshotJSON()
+        for key in ["world", "body", "memory", "context"] {
+            #expect(json.contains("\"\(key)\""))
+        }
+    }
+}
