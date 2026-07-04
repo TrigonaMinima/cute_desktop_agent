@@ -110,4 +110,25 @@ public enum Constants {
         .blush: .hatch,
         .happy: .hatch,
     ]
+
+    // MARK: Render — squash/stretch (mechanical port of blob.js's render(), lines ~200+)
+
+    /// Angular frequency applied to `now/1000` for the idle/moving breathing wobble.
+    public static let wobbleFrequency: Double = 2.2
+    /// Amplitude (px) of the vertical bob, `wobble * bobAmplitude` — zeroed while
+    /// dragging or in `happy` mode.
+    public static let bobAmplitude: Double = 3
+
+    /// Squash applied while dragging: (scaleX, scaleY).
+    public static let dragScale: (x: Double, y: Double) = (1.05, 0.95)
+    /// Squash applied while mid-transit to a target (not dragging/happy): (scaleX, scaleY).
+    public static let movingScale: (x: Double, y: Double) = (1.08, 0.92)
+    /// Idle breathing wobble amplitude applied to scaleY (+) and scaleX (-) respectively.
+    public static let idleWobbleScaleY: Double = 0.03
+    public static let idleWobbleScaleX: Double = 0.02
+
+    /// Happy-bounce amplitude applied to scaleY (+) and scaleX (-) respectively, scaled
+    /// by the decaying `bounce` term — see `computeBodyMotion`.
+    public static let happyBounceScaleY: Double = 0.25
+    public static let happyBounceScaleX: Double = 0.15
 }

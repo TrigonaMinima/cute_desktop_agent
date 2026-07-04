@@ -14,18 +14,20 @@ enum TestFixtures {
         position: Point = Point(x: 100, y: 100),
         cursor: Point = Point(x: 0, y: 0),
         dragging: Bool = false,
+        moving: Bool = false,
         quirkEmotion: Emotion? = nil,
         quirkUntil: Double = 0,
-        proximityUntil: Double = 0
+        proximityUntil: Double = 0,
+        happyUntil: Double = 0
     ) -> AgentState {
         AgentState(
             world: AgentWorld(screenBounds: bounds, cursor: cursor, frontmostApp: nil, windowBelow: nil),
             body: AgentBody(
-                position: position, mode: mode, target: position, moving: false, emotion: .neutral,
+                position: position, mode: mode, target: position, moving: moving, emotion: .neutral,
                 dragging: dragging, dragOffset: Vector(dx: 0, dy: 0), size: blobSize
             ),
             memory: AgentMemory(
-                modeEndsAt: 0, happyUntil: 0, happyResumeMode: .idle, pendingReturn: false,
+                modeEndsAt: 0, happyUntil: happyUntil, happyResumeMode: .idle, pendingReturn: false,
                 nextBlinkAt: 0, blinking: false, blinkEndsAt: 0, quirkEmotion: quirkEmotion,
                 quirkUntil: quirkUntil, nextQuirkAt: 0, proximityUntil: proximityUntil,
                 proximityCooldownUntil: 0
