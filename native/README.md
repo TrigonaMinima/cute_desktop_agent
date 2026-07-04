@@ -50,10 +50,29 @@ swift run --package-path native Spike
 ## Phase 1 gate — status: bundling mechanism verified
 
 `build-app.sh` reads `config.json` and assembles `build/<displayName>.app` (correct
-`Info.plist` substitution, ad-hoc `codesign`, binary renamed to `displayName`). Full
-behavioral re-verification against the Phase 0 checklist is deferred until `AgentApp`
-has a real overlay window (Phase 4/5) — right now `AgentApp/main.swift` is a placeholder
-that prints and exits.
+`Info.plist` substitution, ad-hoc `codesign`, binary renamed to `displayName`).
+
+## Phase 4/5 — render + interaction wiring — status: complete
+
+`AvatarView` (layer-backed, `isFlipped`) hosts the `SlimeAvatar` layer tree, driven per
+frame by `FrameClock` under a disable-actions transaction. `Perception` polls cursor +
+frontmost app each tick into `AgentState.world`; hover hit-testing, avatar-owned drag, and
+the status item's Quit action are all wired in `AppDelegate`.
+
+## Phase 6 — RAM comparison — status: measured
+
+Physical footprint (`footprint <pid>`, no sudo needed for own-user processes), both apps
+idle at the desktop with no interaction:
+
+| Build | Physical footprint | Processes measured |
+|---|---|---|
+| `native/build/Jiggy.app` | **12 MB** | 1 (single process) |
+| `electron-poc` | **226 MB** | 4 — main (38 MB) + renderer (38 MB) + GPU (138 MB) + network-service utility (12 MB) |
+
+~18x lower than the Electron POC, and above the plan's rough ~150 MB estimate for the
+Electron baseline (the real POC came in higher once all four helper processes are
+summed). Remaining Phase 6 polish (bubble-pop anchor-point fix, dome bezier/gloss/blush
+tuning to match the POC's CSS, broader motion-feel comparison) is still open.
 
 ## Toolchain notes
 
