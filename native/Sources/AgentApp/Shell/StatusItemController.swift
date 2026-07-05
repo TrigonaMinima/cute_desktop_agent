@@ -3,34 +3,31 @@ import AgentCore
 
 /// Menu-bar status item — the only UI chrome this accessory app has. Glyph is
 /// config-driven (`config.statusItemTitle`) and never changes; the dropdown instead
-/// shows the live agent state, rebuilt fresh each time it opens (`NSMenuDelegate.
-/// menuNeedsUpdate`) rather than pushed per tick, since menu contents only matter while
-/// the menu is actually visible. Quit stays pinned at the bottom.
-public final class StatusItemController: NSObject, NSMenuDelegate {
+/// shows the live agent state via a `LiveMenuController`, which rebuilds on open and
+/// keeps refreshing while the dropdown stays open (see its doc comment). Quit stays
+/// pinned at the bottom.
+public final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
-    private let menu = NSMenu()
+    private let liveMenu: LiveMenuController
 
-    /// Pull hook for live state — set by `AppDelegate` to read its current `AgentState`.
-    /// `nil`/omitted just yields an empty-sections summary (e.g. before first tick).
-    public var summaryProvider: (() -> StatusSummary)?
-
-    public init(title: String) {
+    /// - Parameter summaryProvider: pull hook for live state, read once per menu open and
+    ///   again each frame while open. `AppDelegate` supplies one reading its current
+    ///   `AgentState`; a `nil` state (e.g. before first tick) is its caller's concern, not
+    ///   this type's.
+    public init(title: String, summaryProvider: @escaping () -> StatusSummary) {
         // .variableLength, not .squareLength — the latter is sized for an icon-only
         // button and clips a text/emoji title.
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        liveMenu = LiveMenuController(summaryProvider: summaryProvider)
         super.init()
         statusItem.button?.title = title
         statusItem.isVisible = true
-
-        menu.delegate = self
-        statusItem.menu = menu
+        statusItem.menu = liveMenu.menu
     }
 
-    public func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        let summary = summaryProvider?() ?? StatusSummary(sections: [])
-        for item in StatusMenuBuilder.build(for: summary) {
-            menu.addItem(item)
-        }
+    /// Forwarded to the per-frame `FrameClock` tick by `AppDelegate` — a no-op unless the
+    /// dropdown is currently open.
+    public func refreshIfOpen(now: Double) {
+        liveMenu.refreshIfOpen(now: now)
     }
 }

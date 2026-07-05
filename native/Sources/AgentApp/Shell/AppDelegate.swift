@@ -16,6 +16,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var avatarView: AvatarView!
     private var frameClock: FrameClock!
     private var statusItemController: StatusItemController!
+    private var contextMenu: LiveMenuController!
     // Shares `clock` with `stateMachine` for the same reason as above — the typing
     // signal's "how long since the last keystroke" comparison must use the same clock
     // instance the rest of the tick's timers do.
@@ -46,16 +47,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         avatarView = AvatarView(avatar: avatar)
         avatarView.frame = NSRect(origin: .zero, size: screenFrame.size)
         wireDrag()
-        wireContextMenu()
 
         panel = OverlayPanel(screenFrame: screenFrame, contentView: avatarView)
         panel.orderFrontRegardless()
 
-        statusItemController = StatusItemController(title: config.statusItemTitle)
-        statusItemController.summaryProvider = { [weak self] in
-            guard let self, let state = self.state else { return StatusSummary(sections: []) }
-            return state.statusSummary(now: self.clock.now())
+        // One provider shared by both menu surfaces (status-item dropdown + avatar
+        // right-click) so their live refresh reads the identical snapshot rule by
+        // construction — see `summarySnapshot()`.
+        let summaryProvider: () -> StatusSummary = { [weak self] in
+            self?.summarySnapshot() ?? StatusSummary(sections: [])
         }
+        statusItemController = StatusItemController(title: config.statusItemTitle, summaryProvider: summaryProvider)
+        contextMenu = LiveMenuController(summaryProvider: summaryProvider)
+        wireContextMenu()
 
         // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown
         // and scroll-wheel monitor registration are synchronous IPC with WindowServer/TCC,
@@ -77,8 +81,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self.stateMachine.tick(state: &self.state, dt: dt)
             self.avatarView.render(state: self.state, now: now)
             self.updateHitTest()
+
+            // No-ops unless their menu is currently open — see `LiveMenuController`'s doc
+            // comment for why a per-frame push (rather than a `menuWillOpen`-scoped Timer)
+            // is what makes an open menu's rows track live state.
+            self.statusItemController.refreshIfOpen(now: now)
+            self.contextMenu.refreshIfOpen(now: now)
         }
         frameClock.start()
+    }
+
+    /// The single reading of `state` both live menus push into their rows, on open and
+    /// every frame while open. `nil` only before the first tick (`state` unset).
+    private func summarySnapshot() -> StatusSummary? {
+        state?.statusSummary(now: clock.now())
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
@@ -121,11 +137,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             guard AgentCore.isHovering(cursor: cursor, position: self.state.body.position, size: self.state.body.size)
             else { return nil }
 
-            let menu = NSMenu()
-            for item in StatusMenuBuilder.build(for: self.state.statusSummary(now: self.clock.now())) {
-                menu.addItem(item)
-            }
-            return menu
+            // The persistent `LiveMenuController` menu, not a throwaway one — its delegate
+            // rebuilds rows on this open and `refreshIfOpen()` keeps them live afterward.
+            return self.contextMenu.menu
         }
     }
 
