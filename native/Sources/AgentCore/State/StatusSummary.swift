@@ -55,6 +55,7 @@ public extension AgentState {
                 .init(label: "Screen", value: StatusSummary.formatSize(world.screenBounds)),
                 .init(label: "Typing", value: StatusSummary.yesNo(world.typing)),
                 .init(label: "Typing location", value: world.typingLocation.map(StatusSummary.formatRect) ?? "\u{2014}"),
+                .init(label: "Scrolling", value: StatusSummary.formatScrolling(world)),
             ]),
             StatusSummary.Section(title: "Memory", rows: [
                 .init(label: "Mode ends", value: StatusSummary.formatCountdown(target: memory.modeEndsAt, now: now)),
@@ -115,6 +116,11 @@ private extension StatusSummary {
     static func formatCursorMoving(_ world: AgentWorld) -> String {
         guard world.cursorMoving else { return "no" }
         return "yes (\(Int(world.cursorVelocity.magnitude.rounded())) px/s)"
+    }
+
+    static func formatScrolling(_ world: AgentWorld) -> String {
+        guard world.scrolling else { return "no" }
+        return "yes (\(Int(world.scrollVelocity.magnitude.rounded())) px/s)"
     }
 
     static func formatRect(_ rect: Rect) -> String {

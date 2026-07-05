@@ -134,6 +134,16 @@ struct StatusSummaryTests {
         )
     }
 
+    @Test func scrolling_false_displaysAsNo() {
+        let state = Self.populatedState(scrolling: false, scrollVelocity: Vector(dx: 0, dy: 0))
+        #expect(state.statusSummary(now: 0).row(section: "World", label: "Scrolling") == "no")
+    }
+
+    @Test func scrolling_true_displaysAsYesWithSpeed() {
+        let state = Self.populatedState(scrolling: true, scrollVelocity: Vector(dx: 0, dy: -240))
+        #expect(state.statusSummary(now: 0).row(section: "World", label: "Scrolling") == "yes (240 px/s)")
+    }
+
     // MARK: - Memory section
 
     @Test func modeEndsAt_future_formatsAsCountdown() {
@@ -227,6 +237,8 @@ struct StatusSummaryTests {
         screenBounds: Size = Size(width: 1000, height: 800),
         typing: Bool = false,
         typingLocation: Rect? = nil,
+        scrolling: Bool = false,
+        scrollVelocity: Vector = Vector(dx: 0, dy: 0),
         modeEndsAt: Double = 0,
         blinking: Bool = false,
         nextBlinkAt: Double = 0,
@@ -237,7 +249,8 @@ struct StatusSummaryTests {
         AgentState(
             world: AgentWorld(
                 screenBounds: screenBounds, cursor: cursor, cursorVelocity: cursorVelocity,
-                frontmostApp: frontmostApp, windowBelow: nil, typing: typing, typingLocation: typingLocation
+                frontmostApp: frontmostApp, windowBelow: nil, typing: typing, typingLocation: typingLocation,
+                scrolling: scrolling, scrollVelocity: scrollVelocity
             ),
             body: AgentBody(
                 position: position, mode: mode, target: target, moving: moving, emotion: emotion,
