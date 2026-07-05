@@ -10,7 +10,8 @@ import AgentCore
 /// A class, not an enum namespace, because deriving `cursorVelocity` needs a tick-to-tick
 /// baseline — mirrors `FrameClock`, which owns `lastTimestamp` the same way rather than
 /// making its caller thread a "previous" value through each call. `typing` detection adds
-/// a second, event-driven baseline (`lastKeystrokeAt`) for the same reason.
+/// a second, event-driven baseline (`lastKeystrokeAt`), and `scrolling`/`scrollVelocity`
+/// a third (`lastScrollAt`/`pendingScrollDelta`), for the same reason.
 final class Perception {
     private let clock: Clock
 
@@ -46,10 +47,23 @@ final class Perception {
     private var cachedFrontmostWindow: WindowInfo?
     private var lastWindowPid: pid_t?
 
+    /// When the most recent scroll-wheel event fired, per `clock` — 0 means "none
+    /// observed yet" (see `AgentCore.isScrollActive`'s doc comment). Written
+    /// asynchronously by the global monitor's handler, between polls, not by `poll`
+    /// itself — mirrors `lastKeystrokeAt`.
+    private var lastScrollAt: Double = 0
+    /// Scroll delta (points) accumulated since the last `poll` call, summed across
+    /// however many scroll-wheel events fired in that window; `poll` converts this to
+    /// px/sec and resets it. A *mouse* global monitor, unlike `keyDownMonitor` — needs
+    /// no Accessibility/Input-Monitoring grant, just the one this process already has.
+    private var pendingScrollDelta = Vector(dx: 0, dy: 0)
+    private var scrollMonitor: Any?
+
     /// Installs a global keydown monitor and prompts for Accessibility once — both the
     /// typing signal and `caretLocation` need that grant. A *global*, not local, monitor:
     /// this is a background accessory with no key window of its own, so it only ever sees
-    /// keys the user presses in other apps via the global monitor.
+    /// keys the user presses in other apps via the global monitor. Also installs a global
+    /// scroll-wheel monitor for the `scrolling`/`scrollVelocity` signals, same rationale.
     init(clock: Clock) {
         self.clock = clock
         let promptOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
@@ -57,11 +71,20 @@ final class Perception {
         keyDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] _ in
             self?.lastKeystrokeAt = self?.clock.now() ?? 0
         }
+        scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return }
+            self.lastScrollAt = self.clock.now()
+            self.pendingScrollDelta.dx += Double(event.scrollingDeltaX)
+            self.pendingScrollDelta.dy += Double(event.scrollingDeltaY)
+        }
     }
 
     deinit {
         if let keyDownMonitor {
             NSEvent.removeMonitor(keyDownMonitor)
+        }
+        if let scrollMonitor {
+            NSEvent.removeMonitor(scrollMonitor)
         }
     }
 
@@ -73,7 +96,7 @@ final class Perception {
         screenFrame: NSRect, dt: Double
     ) -> (
         cursor: Point, cursorVelocity: Vector, frontmostApp: AppInfo?, frontmostWindow: WindowInfo?,
-        typing: Bool, typingLocation: Rect?
+        typing: Bool, typingLocation: Rect?, scrolling: Bool, scrollVelocity: Vector
     ) {
         let cursor = CoordinateSpace.webPoint(fromGlobal: NSEvent.mouseLocation, screenFrame: screenFrame)
         // No prior sample on the first poll (`lastCursor == nil`) — fall back to `cursor`
@@ -93,7 +116,14 @@ final class Perception {
             lastKeystrokeAt: lastKeystrokeAt, now: now, timeoutMs: Constants.typingIdleTimeoutMs
         )
         let typingLocation = pollCaretLocation(typing: typing, now: now)
-        return (cursor, velocity, frontmostApp, frontmostWindow, typing, typingLocation)
+        let scrolling = isScrollActive(
+            lastScrollAt: lastScrollAt, now: now, timeoutMs: Constants.scrollActiveTimeoutMs
+        )
+        // Reuses `cursorVelocity`'s tested dt<=0 guard via its Vector-delta overload
+        // rather than re-deriving it.
+        let scrollVelocity = AgentCore.cursorVelocity(from: pendingScrollDelta, dt: dt)
+        pendingScrollDelta = Vector(dx: 0, dy: 0)
+        return (cursor, velocity, frontmostApp, frontmostWindow, typing, typingLocation, scrolling, scrollVelocity)
     }
 
     /// Gates and throttles the expensive AX caret query — see `caretPollIntervalMs`'s doc

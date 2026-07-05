@@ -21,7 +21,9 @@ struct AgentStateCodableTests {
                     frame: Rect(origin: Point(x: 20, y: 40), size: Size(width: 800, height: 600))
                 ),
                 typing: true,
-                typingLocation: Rect(origin: Point(x: 410, y: 305), size: Size(width: 2, height: 16))
+                typingLocation: Rect(origin: Point(x: 410, y: 305), size: Size(width: 2, height: 16)),
+                scrolling: true,
+                scrollVelocity: Vector(dx: 0, dy: -240)
             ),
             body: AgentBody(
                 position: Point(x: 100, y: 200),
@@ -160,5 +162,12 @@ struct AgentStateCodableTests {
         let json = try Self.populatedState().snapshotJSON()
         #expect(json.contains("\"typing\""))
         #expect(json.contains("\"typingLocation\""))
+    }
+
+    @Test func snapshotJSON_containsScrolling_asAPerceivedSignal() throws {
+        let json = try Self.populatedState().snapshotJSON()
+        #expect(json.contains("\"scrolling\""))
+        #expect(json.contains("\"scrollVelocity\""))
+        #expect(json.contains("-240"))
     }
 }

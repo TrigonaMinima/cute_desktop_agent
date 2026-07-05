@@ -1,9 +1,9 @@
 import Foundation
 
 /// Perception region: what the agent currently senses about the outside world. Written
-/// once per tick by `AgentApp`'s Perception layer, never by `StateMachine`. `cursorVelocity`
-/// and `typing` are the fields here that are derived rather than polled directly — see
-/// their doc comments.
+/// once per tick by `AgentApp`'s Perception layer, never by `StateMachine`. `cursorVelocity`,
+/// `typing`, and `scrolling`/`scrollVelocity` are the fields here that are derived rather
+/// than polled directly — see their doc comments.
 public struct AgentWorld: Codable, Equatable {
     public var screenBounds: Size
     public var cursor: Point
@@ -30,12 +30,24 @@ public struct AgentWorld: Codable, Equatable {
     /// bounds — many Electron/web views don't — so it degrades to `nil` exactly like
     /// `windowBelow`: reserved shape, populated when available, omitted from JSON when not.
     public var typingLocation: Rect?
+    /// Whether the user is actively scrolling (in any app) — a global scroll-wheel
+    /// timestamp aged against `Constants.scrollActiveTimeoutMs` by
+    /// `AgentCore.isScrollActive`. Same decay-window shape as `typing`: scroll events
+    /// arrive in discrete bursts (trackpad phases + momentum), so this smooths the gaps
+    /// between them rather than reading as an instantaneous velocity check.
+    public var scrolling: Bool
+    /// This frame's scroll speed/direction in px/sec, web space — derived from the
+    /// scroll delta accumulated since the last poll, divided by `dt`. Unlike `scrolling`,
+    /// this is instantaneous: it reads zero on any frame with no scroll events, even
+    /// while `scrolling` is still true from a recent burst. Mirrors `cursorVelocity`.
+    public var scrollVelocity: Vector
 
     public init(
         screenBounds: Size, cursor: Point, cursorVelocity: Vector = Vector(dx: 0, dy: 0),
         frontmostApp: AppInfo? = nil, windowBelow: WindowInfo? = nil,
         frontmostWindow: WindowInfo? = nil,
-        typing: Bool = false, typingLocation: Rect? = nil
+        typing: Bool = false, typingLocation: Rect? = nil,
+        scrolling: Bool = false, scrollVelocity: Vector = Vector(dx: 0, dy: 0)
     ) {
         self.screenBounds = screenBounds
         self.cursor = cursor
@@ -45,6 +57,8 @@ public struct AgentWorld: Codable, Equatable {
         self.frontmostWindow = frontmostWindow
         self.typing = typing
         self.typingLocation = typingLocation
+        self.scrolling = scrolling
+        self.scrollVelocity = scrollVelocity
     }
 
     /// True when this frame's cursor speed exceeds `Constants.cursorMovingThreshold` —

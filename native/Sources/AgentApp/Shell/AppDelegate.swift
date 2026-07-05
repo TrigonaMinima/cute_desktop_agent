@@ -58,8 +58,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown
-        // monitor registration are synchronous IPC with WindowServer/TCC, which must not
-        // land on the first `frameClock` tick (a 60Hz display-link callback).
+        // and scroll-wheel monitor registration are synchronous IPC with WindowServer/TCC,
+        // which must not land on the first `frameClock` tick (a 60Hz display-link callback).
         _ = perception
 
         frameClock = FrameClock(hostView: avatarView, clock: clock) { [weak self] now, dt in
@@ -71,6 +71,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self.state.world.frontmostWindow = perceived.frontmostWindow
             self.state.world.typing = perceived.typing
             self.state.world.typingLocation = perceived.typingLocation
+            self.state.world.scrolling = perceived.scrolling
+            self.state.world.scrollVelocity = perceived.scrollVelocity
 
             self.stateMachine.tick(state: &self.state, dt: dt)
             self.avatarView.render(state: self.state, now: now)

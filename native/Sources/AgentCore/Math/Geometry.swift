@@ -55,6 +55,13 @@ public func cursorVelocity(from previous: Point, to current: Point, dt: Double) 
     return Vector(dx: (current.x - previous.x) / dt, dy: (current.y - previous.y) / dt)
 }
 
+/// Overload for callers that already have a displacement rather than two positions to
+/// diff — e.g. `Perception`'s accumulated scroll delta. Delegates to the point-based
+/// overload above so the `dt <= 0` guard lives in exactly one place.
+public func cursorVelocity(from delta: Vector, dt: Double) -> Vector {
+    cursorVelocity(from: Point(x: 0, y: 0), to: Point(x: delta.dx, y: delta.dy), dt: dt)
+}
+
 /// Whether a keystroke that happened `lastKeystrokeAt` still counts as "typing right now"
 /// at `now` — a derived perceived signal, the typing analog of `cursorVelocity` just
 /// above: raw primitives in, no `AgentState` touched, feeding `AgentWorld.typing`.
@@ -65,4 +72,17 @@ public func cursorVelocity(from previous: Point, to current: Point, dt: Double) 
 public func isTypingActive(lastKeystrokeAt: Double, now: Double, timeoutMs: Double) -> Bool {
     guard lastKeystrokeAt > 0 else { return false }
     return now - lastKeystrokeAt < timeoutMs
+}
+
+/// Whether a scroll-wheel event that happened `lastScrollAt` still counts as "scrolling
+/// right now" at `now` — the scroll analog of `isTypingActive`: scroll events arrive in
+/// discrete bursts (trackpad phases + momentum), so this smooths over the gaps between
+/// them rather than flickering false between every event, feeding `AgentWorld.scrolling`.
+///
+/// `lastScrollAt == 0` is the "no scroll observed yet" baseline (mirrors
+/// `isTypingActive`'s `lastKeystrokeAt == 0` case) and always reads as not-scrolling,
+/// rather than as "scrolled at time zero."
+public func isScrollActive(lastScrollAt: Double, now: Double, timeoutMs: Double) -> Bool {
+    guard lastScrollAt > 0 else { return false }
+    return now - lastScrollAt < timeoutMs
 }

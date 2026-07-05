@@ -58,6 +58,11 @@ public enum Constants {
     /// between every letter.
     public static let typingIdleTimeoutMs: Double = 1500
 
+    /// How long (ms) after the last scroll-wheel event `AgentWorld.scrolling` keeps
+    /// reporting true — bridges trackpad momentum/phase gaps between scroll bursts.
+    /// Shorter than `typingIdleTimeoutMs` since scroll events arrive denser than keystrokes.
+    public static let scrollActiveTimeoutMs: Double = 400
+
     // The three constants below seed the ONE-TIME boot state (JS's inline `state`
     // object literal, blob.js lines 147-165) and are deliberately DIFFERENT from the
     // steady-state reschedule literals above — not a typo, preserved exactly.
