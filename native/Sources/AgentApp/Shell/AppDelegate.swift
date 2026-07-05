@@ -46,11 +46,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         avatarView = AvatarView(avatar: avatar)
         avatarView.frame = NSRect(origin: .zero, size: screenFrame.size)
         wireDrag()
+        wireContextMenu()
 
         panel = OverlayPanel(screenFrame: screenFrame, contentView: avatarView)
         panel.orderFrontRegardless()
 
         statusItemController = StatusItemController(title: config.statusItemTitle)
+        statusItemController.summaryProvider = { [weak self] in
+            guard let self, let state = self.state else { return StatusSummary(sections: []) }
+            return state.statusSummary(now: self.clock.now())
+        }
 
         // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown
         // monitor registration are synchronous IPC with WindowServer/TCC, which must not
@@ -99,6 +104,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         avatarView.onMouseUp = { [weak self] in
             guard let self else { return }
             self.stateMachine.endDrag(state: &self.state, now: self.clock.now())
+        }
+    }
+
+    // MARK: - Right-click context menu (avatar-owned, mirrors the status item's rows)
+
+    private func wireContextMenu() {
+        avatarView.onBuildContextMenu = { [weak self] point in
+            guard let self else { return nil }
+            let cursor = Point(x: Double(point.x), y: Double(point.y))
+            // Safety net against the one-frame click-through window `updateHitTest`
+            // hasn't caught up to yet — same box check that drives hover/hit-testing.
+            guard AgentCore.isHovering(cursor: cursor, position: self.state.body.position, size: self.state.body.size)
+            else { return nil }
+
+            let menu = NSMenu()
+            for item in StatusMenuBuilder.build(for: self.state.statusSummary(now: self.clock.now())) {
+                menu.addItem(item)
+            }
+            return menu
         }
     }
 

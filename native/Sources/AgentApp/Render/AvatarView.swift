@@ -25,6 +25,13 @@ public final class AvatarView: NSView {
     public var onMouseDragged: ((CGPoint) -> Void)?
     public var onMouseUp: (() -> Void)?
 
+    /// Builds the right-click context menu for a click at `point` (same flipped,
+    /// top-left-origin "web space" as the closures above). `AppDelegate` guards this
+    /// with the same `AgentCore.isHovering` box check `updateHitTest` uses and returns
+    /// `nil` for a click that lands off the avatar during the one-frame window before
+    /// hit-testing catches up.
+    public var onBuildContextMenu: ((CGPoint) -> NSMenu?)?
+
     public override var isFlipped: Bool { true }
 
     public init(avatar: Avatar) {
@@ -49,6 +56,14 @@ public final class AvatarView: NSView {
 
     public override func mouseUp(with event: NSEvent) {
         onMouseUp?()
+    }
+
+    /// Right-click path. AppKit owns popup positioning and runs its own tracking loop
+    /// for the returned menu, so — unlike a manual `rightMouseDown` + `NSMenu.popUp` —
+    /// this needs no coordination with the `CADisplayLink`-driven frame clock or the
+    /// panel's per-frame `ignoresMouseEvents` toggling.
+    public override func menu(for event: NSEvent) -> NSMenu? {
+        onBuildContextMenu?(convert(event.locationInWindow, from: nil))
     }
 
     /// Applies one frame of `state` to the layer tree. Every per-frame layer write is
