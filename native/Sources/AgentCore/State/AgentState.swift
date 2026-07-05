@@ -2,7 +2,8 @@ import Foundation
 
 /// Perception region: what the agent currently senses about the outside world. Written
 /// once per tick by `AgentApp`'s Perception layer, never by `StateMachine`. `cursorVelocity`
-/// is the one field here that's derived rather than polled directly — see its doc comment.
+/// and `typing` are the fields here that are derived rather than polled directly — see
+/// their doc comments.
 public struct AgentWorld: Codable, Equatable {
     public var screenBounds: Size
     public var cursor: Point
@@ -13,16 +14,30 @@ public struct AgentWorld: Codable, Equatable {
     public var frontmostApp: AppInfo?
     /// Reserved — see WindowInfo.swift. Always `nil` this round.
     public var windowBelow: WindowInfo?
+    /// Whether the user is actively typing (in any app, not necessarily this one) — a
+    /// global keydown timestamp aged against `Constants.typingIdleTimeoutMs` by
+    /// `AgentCore.isTypingActive`. Solid: only needs an Accessibility/Input-Monitoring
+    /// grant, not a per-app cooperating text field. `false` (not merely absent) when
+    /// there's no signal, matching `cursor`'s always-present convention.
+    public var typing: Bool
+    /// Caret bounds (web space) where the user is typing, best-effort via the
+    /// Accessibility API. Unlike `typing`, this needs the focused app to expose caret
+    /// bounds — many Electron/web views don't — so it degrades to `nil` exactly like
+    /// `windowBelow`: reserved shape, populated when available, omitted from JSON when not.
+    public var typingLocation: Rect?
 
     public init(
         screenBounds: Size, cursor: Point, cursorVelocity: Vector = Vector(dx: 0, dy: 0),
-        frontmostApp: AppInfo? = nil, windowBelow: WindowInfo? = nil
+        frontmostApp: AppInfo? = nil, windowBelow: WindowInfo? = nil,
+        typing: Bool = false, typingLocation: Rect? = nil
     ) {
         self.screenBounds = screenBounds
         self.cursor = cursor
         self.cursorVelocity = cursorVelocity
         self.frontmostApp = frontmostApp
         self.windowBelow = windowBelow
+        self.typing = typing
+        self.typingLocation = typingLocation
     }
 
     /// True when this frame's cursor speed exceeds `Constants.cursorMovingThreshold` —

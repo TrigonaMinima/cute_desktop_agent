@@ -15,7 +15,9 @@ struct AgentStateCodableTests {
                 cursor: Point(x: 400, y: 300),
                 cursorVelocity: Vector(dx: 120, dy: -45),
                 frontmostApp: AppInfo(bundleIdentifier: "com.apple.Terminal", name: "Terminal"),
-                windowBelow: nil
+                windowBelow: nil,
+                typing: true,
+                typingLocation: Rect(origin: Point(x: 410, y: 305), size: Size(width: 2, height: 16))
             ),
             body: AgentBody(
                 position: Point(x: 100, y: 200),
@@ -68,6 +70,27 @@ struct AgentStateCodableTests {
         #expect(decoded.world.windowBelow == nil)
     }
 
+    @Test func agentState_typingLocation_isReservedAndOmittedWhenNil() throws {
+        // Own fixture, not populatedState() — that one deliberately populates
+        // typingLocation to prove round-trip fidelity; this one proves the opposite
+        // (nil) case, mirroring agentState_windowBelow_isReservedAndOmittedWhenNil.
+        var state = Self.populatedState()
+        state.world.typing = false
+        state.world.typingLocation = nil
+        #expect(state.world.typingLocation == nil)
+
+        // Swift's synthesized Codable uses encodeIfPresent for Optional properties, so
+        // a nil typingLocation drops the key entirely rather than emitting JSON null.
+        let data = try JSONEncoder().encode(state)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let world = json?["world"] as? [String: Any]
+        #expect(world?["typingLocation"] == nil)
+
+        // And it still decodes back to nil, so "best-effort and unpopulated" round-trips.
+        let decoded = try JSONDecoder().decode(AgentState.self, from: data)
+        #expect(decoded.world.typingLocation == nil)
+    }
+
     @Test func mode_isStringBacked_forHumanAndLLMLegibleJSON() throws {
         let data = try JSONEncoder().encode(Mode.wander)
         let string = String(data: data, encoding: .utf8)
@@ -107,5 +130,11 @@ struct AgentStateCodableTests {
         let json = try Self.populatedState().snapshotJSON()
         #expect(json.contains("\"cursorVelocity\""))
         #expect(json.contains("120"))
+    }
+
+    @Test func snapshotJSON_containsTyping_asAPerceivedSignal() throws {
+        let json = try Self.populatedState().snapshotJSON()
+        #expect(json.contains("\"typing\""))
+        #expect(json.contains("\"typingLocation\""))
     }
 }

@@ -54,3 +54,15 @@ public func cursorVelocity(from previous: Point, to current: Point, dt: Double) 
     guard dt > 0 else { return Vector(dx: 0, dy: 0) }
     return Vector(dx: (current.x - previous.x) / dt, dy: (current.y - previous.y) / dt)
 }
+
+/// Whether a keystroke that happened `lastKeystrokeAt` still counts as "typing right now"
+/// at `now` — a derived perceived signal, the typing analog of `cursorVelocity` just
+/// above: raw primitives in, no `AgentState` touched, feeding `AgentWorld.typing`.
+///
+/// `lastKeystrokeAt == 0` is the "no keystroke observed yet" baseline (mirrors
+/// `AgentApp.Perception`'s `lastCursor == nil` case) and always reads as not-typing,
+/// rather than as "typed at time zero."
+public func isTypingActive(lastKeystrokeAt: Double, now: Double, timeoutMs: Double) -> Bool {
+    guard lastKeystrokeAt > 0 else { return false }
+    return now - lastKeystrokeAt < timeoutMs
+}

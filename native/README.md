@@ -59,6 +59,21 @@ frame by `FrameClock` under a disable-actions transaction. `Perception` polls cu
 frontmost app each tick into `AgentState.world`; hover hit-testing, avatar-owned drag, and
 the status item's Quit action are all wired in `AppDelegate`.
 
+`Perception` also derives `world.typing`/`world.typingLocation` — whether the user is
+currently typing (anywhere, not just in this app) and, best-effort, the caret's screen
+location. Both need an **Accessibility grant**: the app prompts for it on first launch
+(`AXIsProcessTrustedWithOptions`). `typing` is solid once granted (a global keydown
+monitor); `typingLocation` additionally needs the focused app to expose AX caret-bounds
+attributes, which many Electron/web-based apps don't, so it degrades to `nil` in those
+cases (same reserved-but-best-effort shape as the still-unpopulated `AgentWorld.windowBelow`
+— see its doc comment). Ad-hoc rebuilds re-trigger the Accessibility prompt, same TCC
+caveat that applies to any permission-gated perception signal here.
+
+The caret query is synchronous cross-process AX IPC, unlike the cheap arithmetic behind
+`cursorVelocity`/`typing`, so it isn't run every tick: `Perception` only queries it while
+`typing` is true and throttles to one query per 200ms (`caretPollIntervalMs`), caching the
+last result between polls — see `Perception.pollCaretLocation`'s doc comment.
+
 ## Phase 6 — RAM comparison — status: measured
 
 Physical footprint (`footprint <pid>`, no sudo needed for own-user processes), both apps

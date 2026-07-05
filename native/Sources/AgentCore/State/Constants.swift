@@ -53,6 +53,11 @@ public enum Constants {
     /// mainly a jitter floor for sub-pixel/OS-reported drift, not a real motion threshold.
     public static let cursorMovingThreshold: Double = 5
 
+    /// How long (ms) after the last keydown `AgentWorld.typing` keeps reporting true —
+    /// smooths over the natural gaps between keystrokes rather than flickering false
+    /// between every letter.
+    public static let typingIdleTimeoutMs: Double = 1500
+
     // The three constants below seed the ONE-TIME boot state (JS's inline `state`
     // object literal, blob.js lines 147-165) and are deliberately DIFFERENT from the
     // steady-state reschedule literals above — not a typo, preserved exactly.

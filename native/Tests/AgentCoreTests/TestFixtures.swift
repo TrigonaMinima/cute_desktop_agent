@@ -18,10 +18,15 @@ enum TestFixtures {
         quirkEmotion: Emotion? = nil,
         quirkUntil: Double = 0,
         proximityUntil: Double = 0,
-        happyUntil: Double = 0
+        happyUntil: Double = 0,
+        typing: Bool = false,
+        typingLocation: Rect? = nil
     ) -> AgentState {
         AgentState(
-            world: AgentWorld(screenBounds: bounds, cursor: cursor, frontmostApp: nil, windowBelow: nil),
+            world: AgentWorld(
+                screenBounds: bounds, cursor: cursor, frontmostApp: nil, windowBelow: nil,
+                typing: typing, typingLocation: typingLocation
+            ),
             body: AgentBody(
                 position: position, mode: mode, target: position, moving: moving, emotion: .neutral,
                 dragging: dragging, dragOffset: Vector(dx: 0, dy: 0), size: blobSize

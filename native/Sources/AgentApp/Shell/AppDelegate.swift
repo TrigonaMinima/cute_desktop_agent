@@ -16,7 +16,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var avatarView: AvatarView!
     private var frameClock: FrameClock!
     private var statusItemController: StatusItemController!
-    private let perception = Perception()
+    // Shares `clock` with `stateMachine` for the same reason as above — the typing
+    // signal's "how long since the last keystroke" comparison must use the same clock
+    // instance the rest of the tick's timers do.
+    private lazy var perception = Perception(clock: clock)
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -49,12 +52,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItemController = StatusItemController(title: config.statusItemTitle)
 
+        // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown
+        // monitor registration are synchronous IPC with WindowServer/TCC, which must not
+        // land on the first `frameClock` tick (a 60Hz display-link callback).
+        _ = perception
+
         frameClock = FrameClock(hostView: avatarView, clock: clock) { [weak self] now, dt in
             guard let self else { return }
             let perceived = self.perception.poll(screenFrame: self.screenFrame, dt: dt)
             self.state.world.cursor = perceived.cursor
             self.state.world.cursorVelocity = perceived.cursorVelocity
             self.state.world.frontmostApp = perceived.frontmostApp
+            self.state.world.typing = perceived.typing
+            self.state.world.typingLocation = perceived.typingLocation
 
             self.stateMachine.tick(state: &self.state, dt: dt)
             self.avatarView.render(state: self.state, now: now)
