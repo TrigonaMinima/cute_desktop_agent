@@ -68,6 +68,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self.state.world.cursor = perceived.cursor
             self.state.world.cursorVelocity = perceived.cursorVelocity
             self.state.world.frontmostApp = perceived.frontmostApp
+            self.state.world.frontmostWindow = perceived.frontmostWindow
             self.state.world.typing = perceived.typing
             self.state.world.typingLocation = perceived.typingLocation
 

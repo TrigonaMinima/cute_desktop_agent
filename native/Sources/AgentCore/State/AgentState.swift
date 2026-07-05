@@ -14,6 +14,11 @@ public struct AgentWorld: Codable, Equatable {
     public var frontmostApp: AppInfo?
     /// Reserved — see WindowInfo.swift. Always `nil` this round.
     public var windowBelow: WindowInfo?
+    /// The frontmost app's focused/main window: title + frame (web space), best-effort
+    /// via the Accessibility API — see WindowInfo.swift. Unlike `windowBelow`, this is
+    /// populated when available and degrades to `nil` exactly like `typingLocation` (no
+    /// AX window exposed by the frontmost app).
+    public var frontmostWindow: WindowInfo?
     /// Whether the user is actively typing (in any app, not necessarily this one) — a
     /// global keydown timestamp aged against `Constants.typingIdleTimeoutMs` by
     /// `AgentCore.isTypingActive`. Solid: only needs an Accessibility/Input-Monitoring
@@ -29,6 +34,7 @@ public struct AgentWorld: Codable, Equatable {
     public init(
         screenBounds: Size, cursor: Point, cursorVelocity: Vector = Vector(dx: 0, dy: 0),
         frontmostApp: AppInfo? = nil, windowBelow: WindowInfo? = nil,
+        frontmostWindow: WindowInfo? = nil,
         typing: Bool = false, typingLocation: Rect? = nil
     ) {
         self.screenBounds = screenBounds
@@ -36,6 +42,7 @@ public struct AgentWorld: Codable, Equatable {
         self.cursorVelocity = cursorVelocity
         self.frontmostApp = frontmostApp
         self.windowBelow = windowBelow
+        self.frontmostWindow = frontmostWindow
         self.typing = typing
         self.typingLocation = typingLocation
     }

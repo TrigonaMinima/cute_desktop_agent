@@ -16,6 +16,10 @@ struct AgentStateCodableTests {
                 cursorVelocity: Vector(dx: 120, dy: -45),
                 frontmostApp: AppInfo(bundleIdentifier: "com.apple.Terminal", name: "Terminal"),
                 windowBelow: nil,
+                frontmostWindow: WindowInfo(
+                    ownerName: "Terminal", title: "bash",
+                    frame: Rect(origin: Point(x: 20, y: 40), size: Size(width: 800, height: 600))
+                ),
                 typing: true,
                 typingLocation: Rect(origin: Point(x: 410, y: 305), size: Size(width: 2, height: 16))
             ),
@@ -68,6 +72,26 @@ struct AgentStateCodableTests {
         // And it still decodes back to nil, so "reserved and unpopulated" round-trips.
         let decoded = try JSONDecoder().decode(AgentState.self, from: data)
         #expect(decoded.world.windowBelow == nil)
+    }
+
+    @Test func agentState_frontmostWindow_isOmittedWhenNil() throws {
+        // Own fixture, not populatedState() — that one deliberately populates
+        // frontmostWindow to prove round-trip fidelity; this one proves the opposite
+        // (nil) case, mirroring agentState_windowBelow_isReservedAndOmittedWhenNil.
+        var state = Self.populatedState()
+        state.world.frontmostWindow = nil
+        #expect(state.world.frontmostWindow == nil)
+
+        // Swift's synthesized Codable uses encodeIfPresent for Optional properties, so
+        // a nil frontmostWindow drops the key entirely rather than emitting JSON null.
+        let data = try JSONEncoder().encode(state)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let world = json?["world"] as? [String: Any]
+        #expect(world?["frontmostWindow"] == nil)
+
+        // And it still decodes back to nil, so "best-effort and unpopulated" round-trips.
+        let decoded = try JSONDecoder().decode(AgentState.self, from: data)
+        #expect(decoded.world.frontmostWindow == nil)
     }
 
     @Test func agentState_typingLocation_isReservedAndOmittedWhenNil() throws {

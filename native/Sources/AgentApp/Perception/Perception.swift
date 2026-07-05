@@ -36,6 +36,16 @@ final class Perception {
     private var lastCaretQueryAt: Double = -.infinity
     private var cachedTypingLocation: Rect?
 
+    /// Same synchronous cross-process AX IPC cost and throttle as `caretLocation` — see
+    /// its doc comment. Unlike the caret, there's always a frontmost app to query (no
+    /// `typing`-style gate), so this is throttled purely on time, plus an immediate
+    /// re-query on app switch (`lastWindowPid` changing) rather than serving up to
+    /// `windowPollIntervalMs` of a stale previous app's frame.
+    private static let windowPollIntervalMs: Double = 200
+    private var lastWindowQueryAt: Double = -.infinity
+    private var cachedFrontmostWindow: WindowInfo?
+    private var lastWindowPid: pid_t?
+
     /// Installs a global keydown monitor and prompts for Accessibility once — both the
     /// typing signal and `caretLocation` need that grant. A *global*, not local, monitor:
     /// this is a background accessory with no key window of its own, so it only ever sees
@@ -61,22 +71,29 @@ final class Perception {
     /// `dt <= 0`) to zero rather than dividing by zero/negative.
     func poll(
         screenFrame: NSRect, dt: Double
-    ) -> (cursor: Point, cursorVelocity: Vector, frontmostApp: AppInfo?, typing: Bool, typingLocation: Rect?) {
+    ) -> (
+        cursor: Point, cursorVelocity: Vector, frontmostApp: AppInfo?, frontmostWindow: WindowInfo?,
+        typing: Bool, typingLocation: Rect?
+    ) {
         let cursor = CoordinateSpace.webPoint(fromGlobal: NSEvent.mouseLocation, screenFrame: screenFrame)
         // No prior sample on the first poll (`lastCursor == nil`) — fall back to `cursor`
         // itself so `from == to` and the numerator is zero, letting `cursorVelocity` own all
         // zero-velocity logic in one place instead of special-casing "no baseline yet" here too.
         let velocity = AgentCore.cursorVelocity(from: lastCursor ?? cursor, to: cursor, dt: dt)
         lastCursor = cursor
-        let frontmostApp = NSWorkspace.shared.frontmostApplication.map {
+        // Read once, not twice: `frontmostApp` (AgentCore-facing) and `frontmostWindow`'s AX
+        // query both derive from the same `NSRunningApplication` snapshot.
+        let frontmostRunningApp = NSWorkspace.shared.frontmostApplication
+        let frontmostApp = frontmostRunningApp.map {
             AppInfo(bundleIdentifier: $0.bundleIdentifier, name: $0.localizedName ?? "?")
         }
         let now = clock.now()
+        let frontmostWindow = pollFrontmostWindow(app: frontmostRunningApp, now: now)
         let typing = isTypingActive(
             lastKeystrokeAt: lastKeystrokeAt, now: now, timeoutMs: Constants.typingIdleTimeoutMs
         )
         let typingLocation = pollCaretLocation(typing: typing, now: now)
-        return (cursor, velocity, frontmostApp, typing, typingLocation)
+        return (cursor, velocity, frontmostApp, frontmostWindow, typing, typingLocation)
     }
 
     /// Gates and throttles the expensive AX caret query — see `caretPollIntervalMs`'s doc
@@ -93,6 +110,95 @@ final class Perception {
             lastCaretQueryAt = now
         }
         return cachedTypingLocation
+    }
+
+    /// Gates and throttles the AX window-geometry query — see `windowPollIntervalMs`'s doc
+    /// comment. No frontmost app at all means no window to report, mirroring
+    /// `pollCaretLocation`'s "drop the cache" behavior for the no-signal case.
+    private func pollFrontmostWindow(app: NSRunningApplication?, now: Double) -> WindowInfo? {
+        guard let app else {
+            cachedFrontmostWindow = nil
+            lastWindowQueryAt = -.infinity
+            lastWindowPid = nil
+            return nil
+        }
+        let pidChanged = app.processIdentifier != lastWindowPid
+        if pidChanged || now - lastWindowQueryAt >= Self.windowPollIntervalMs {
+            cachedFrontmostWindow = frontmostWindowInfo(app: app)
+            lastWindowQueryAt = now
+            lastWindowPid = app.processIdentifier
+        }
+        return cachedFrontmostWindow
+    }
+
+    /// Best-effort frontmost-window geometry via the Accessibility API: the app's AX
+    /// element -> its focused window (falling back to the main window, e.g. a dialog
+    /// that isn't itself focused) -> that window's position + size. Every step is
+    /// guarded and falls through to `nil` — the expected outcome for apps that don't
+    /// implement the AX window attributes, exactly like `caretLocation` degrades for
+    /// apps without AX text attributes.
+    ///
+    /// Unlike `caretLocation`'s single `kAXBoundsForRange` rect, a window has no rect
+    /// attribute — position and size are two separate AXValues (`.cgPoint`/`.cgSize`),
+    /// read and combined here.
+    private func frontmostWindowInfo(app: NSRunningApplication) -> WindowInfo? {
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+
+        var windowRef: CFTypeRef?
+        var windowResult = AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &windowRef)
+        if windowResult != .success || windowRef == nil {
+            windowResult = AXUIElementCopyAttributeValue(axApp, kAXMainWindowAttribute as CFString, &windowRef)
+        }
+        guard windowResult == .success, let windowElement = windowRef else { return nil }
+        // See `caretLocation`'s doc comment on why `as!`, not `as?`, is the correct cast here.
+        let window = windowElement as! AXUIElement
+
+        var origin = CGPoint.zero
+        guard axValue(window, kAXPositionAttribute, as: .cgPoint, into: &origin) else { return nil }
+
+        var size = CGSize.zero
+        guard axValue(window, kAXSizeAttribute, as: .cgSize, into: &size) else { return nil }
+
+        var titleRef: CFTypeRef?
+        let title: String?
+        if AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleRef) == .success,
+           let titleString = titleRef as? String, !titleString.isEmpty {
+            title = titleString
+        } else {
+            title = nil
+        }
+
+        let frame = CGRect(origin: origin, size: size)
+        return WindowInfo(
+            ownerName: app.localizedName ?? "?",
+            title: title,
+            frame: CoordinateSpace.webRect(fromGlobal: frame)
+        )
+    }
+
+    /// Reads an AX attribute already known to hold a `.cgPoint`-typed `AXValue` into `out` —
+    /// factors out the position/size duplication in `frontmostWindowInfo` above. See
+    /// `caretLocation`'s doc comment for why `as!` here is a safe static relabeling, not a
+    /// runtime check — the `== .success` guard just before it is the real safety gate.
+    ///
+    /// Overloaded on `out`'s concrete type (`CGPoint`/`CGSize`), not generic: `AXValueGetValue`
+    /// writes through a raw pointer, and Swift can't prove an unconstrained generic parameter
+    /// contains no object reference, so a generic version of this would (rightly) warn.
+    private func axValue(_ element: AXUIElement, _ attribute: String, as type: AXValueType, into out: inout CGPoint) -> Bool {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &ref) == .success,
+              let value = ref
+        else { return false }
+        return AXValueGetValue(value as! AXValue, type, &out)
+    }
+
+    /// `CGSize` counterpart to the `CGPoint` overload just above — see its doc comment.
+    private func axValue(_ element: AXUIElement, _ attribute: String, as type: AXValueType, into out: inout CGSize) -> Bool {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &ref) == .success,
+              let value = ref
+        else { return false }
+        return AXValueGetValue(value as! AXValue, type, &out)
     }
 
     /// Best-effort caret bounds via the Accessibility API: system-wide focused element ->
