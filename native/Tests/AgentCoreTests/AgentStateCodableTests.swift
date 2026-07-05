@@ -13,6 +13,7 @@ struct AgentStateCodableTests {
             world: AgentWorld(
                 screenBounds: Size(width: 1920, height: 1080),
                 cursor: Point(x: 400, y: 300),
+                cursorVelocity: Vector(dx: 120, dy: -45),
                 frontmostApp: AppInfo(bundleIdentifier: "com.apple.Terminal", name: "Terminal"),
                 windowBelow: nil
             ),
@@ -100,5 +101,11 @@ struct AgentStateCodableTests {
         for key in ["world", "body", "memory", "context"] {
             #expect(json.contains("\"\(key)\""))
         }
+    }
+
+    @Test func snapshotJSON_containsCursorVelocity_asAPerceivedSignal() throws {
+        let json = try Self.populatedState().snapshotJSON()
+        #expect(json.contains("\"cursorVelocity\""))
+        #expect(json.contains("120"))
     }
 }

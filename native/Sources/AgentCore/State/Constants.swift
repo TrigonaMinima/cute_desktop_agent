@@ -48,6 +48,11 @@ public enum Constants {
     /// (min, max) cooldown (ms) before another proximity startle may trigger.
     public static let proximityCooldownMsRange: MsRange = (8000, 15000)
 
+    /// Speed (px/sec) above which `AgentWorld.cursorMoving` reports true. A stationary
+    /// cursor polls to exactly the same position each frame (velocity == 0), so this is
+    /// mainly a jitter floor for sub-pixel/OS-reported drift, not a real motion threshold.
+    public static let cursorMovingThreshold: Double = 5
+
     // The three constants below seed the ONE-TIME boot state (JS's inline `state`
     // object literal, blob.js lines 147-165) and are deliberately DIFFERENT from the
     // steady-state reschedule literals above — not a typo, preserved exactly.

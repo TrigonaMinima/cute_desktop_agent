@@ -44,3 +44,13 @@ public func isHovering(cursor: Point, position: Point, size: Size) -> Bool {
     let withinY = cursor.y >= position.y && cursor.y <= position.y + size.height
     return withinX && withinY
 }
+
+/// Cursor velocity in px/sec, web space — a derived perceived signal, not something read
+/// directly from the OS (macOS has no cursor-velocity API). `dt` is the frame delta in
+/// seconds, matching `Constants.moveSpeed`'s px/sec convention. Guards `dt <= 0` (the
+/// first poll with no prior frame, or FrameClock's `[0, 0.1]` floor) to zero rather than
+/// dividing by zero/negative and producing NaN or a sign-flipped spike.
+public func cursorVelocity(from previous: Point, to current: Point, dt: Double) -> Vector {
+    guard dt > 0 else { return Vector(dx: 0, dy: 0) }
+    return Vector(dx: (current.x - previous.x) / dt, dy: (current.y - previous.y) / dt)
+}

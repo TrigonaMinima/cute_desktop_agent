@@ -33,6 +33,13 @@ public struct Vector: Codable, Equatable {
         self.dx = dx
         self.dy = dy
     }
+
+    /// Euclidean length — used to turn a velocity vector into a scalar speed for
+    /// threshold comparisons (see `AgentWorld.cursorMoving`). Delegates to the same
+    /// `hypot` call `Geometry.distance` uses, rather than re-deriving the sqrt formula.
+    public var magnitude: Double {
+        Foundation.hypot(dx, dy)
+    }
 }
 
 public struct Rect: Codable, Equatable {

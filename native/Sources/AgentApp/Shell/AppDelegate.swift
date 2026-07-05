@@ -16,6 +16,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var avatarView: AvatarView!
     private var frameClock: FrameClock!
     private var statusItemController: StatusItemController!
+    private let perception = Perception()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -50,8 +51,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         frameClock = FrameClock(hostView: avatarView, clock: clock) { [weak self] now, dt in
             guard let self else { return }
-            let perceived = Perception.poll(screenFrame: self.screenFrame)
+            let perceived = self.perception.poll(screenFrame: self.screenFrame, dt: dt)
             self.state.world.cursor = perceived.cursor
+            self.state.world.cursorVelocity = perceived.cursorVelocity
             self.state.world.frontmostApp = perceived.frontmostApp
 
             self.stateMachine.tick(state: &self.state, dt: dt)

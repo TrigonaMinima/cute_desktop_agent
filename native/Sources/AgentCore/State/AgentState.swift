@@ -1,19 +1,36 @@
 import Foundation
 
 /// Perception region: what the agent currently senses about the outside world. Written
-/// once per tick by `AgentApp`'s Perception layer, never by `StateMachine`.
+/// once per tick by `AgentApp`'s Perception layer, never by `StateMachine`. `cursorVelocity`
+/// is the one field here that's derived rather than polled directly — see its doc comment.
 public struct AgentWorld: Codable, Equatable {
     public var screenBounds: Size
     public var cursor: Point
+    /// Cursor speed in px/sec, web space — derived tick-to-tick from `cursor` by
+    /// `AgentCore.cursorVelocity`, not read from the OS directly (macOS has no
+    /// cursor-velocity API). Zero on the first frame (no prior cursor to diff against).
+    public var cursorVelocity: Vector
     public var frontmostApp: AppInfo?
     /// Reserved — see WindowInfo.swift. Always `nil` this round.
     public var windowBelow: WindowInfo?
 
-    public init(screenBounds: Size, cursor: Point, frontmostApp: AppInfo? = nil, windowBelow: WindowInfo? = nil) {
+    public init(
+        screenBounds: Size, cursor: Point, cursorVelocity: Vector = Vector(dx: 0, dy: 0),
+        frontmostApp: AppInfo? = nil, windowBelow: WindowInfo? = nil
+    ) {
         self.screenBounds = screenBounds
         self.cursor = cursor
+        self.cursorVelocity = cursorVelocity
         self.frontmostApp = frontmostApp
         self.windowBelow = windowBelow
+    }
+
+    /// True when this frame's cursor speed exceeds `Constants.cursorMovingThreshold` —
+    /// instantaneous motion, not a "recently moved" decay window: flips back to false the
+    /// moment the cursor pauses. Computed, not stored, so it can never drift out of sync
+    /// with `cursorVelocity`.
+    public var cursorMoving: Bool {
+        cursorVelocity.magnitude > Constants.cursorMovingThreshold
     }
 }
 
