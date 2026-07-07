@@ -17,6 +17,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var frameClock: FrameClock!
     private var statusItemController: StatusItemController!
     private var contextMenu: LiveMenuController!
+    // See `LaunchAtLoginController`'s doc comment for why this must be a stored property.
+    private let launchAtLogin = LaunchAtLoginController()
     // Shares `clock` with `stateMachine` for the same reason as above — the typing
     // signal's "how long since the last keystroke" comparison must use the same clock
     // instance the rest of the tick's timers do.
@@ -57,8 +59,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let summaryProvider: () -> StatusSummary = { [weak self] in
             self?.summarySnapshot() ?? StatusSummary(sections: [])
         }
-        statusItemController = StatusItemController(title: config.statusItemTitle, summaryProvider: summaryProvider)
-        contextMenu = LiveMenuController(summaryProvider: summaryProvider)
+        statusItemController = StatusItemController(
+            title: config.statusItemTitle, summaryProvider: summaryProvider, launchAtLogin: launchAtLogin)
+        contextMenu = LiveMenuController(summaryProvider: summaryProvider, launchAtLogin: launchAtLogin)
         wireContextMenu()
 
         // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown

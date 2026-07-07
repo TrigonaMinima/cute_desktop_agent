@@ -26,19 +26,21 @@ public final class LiveMenuController: NSObject, NSMenuDelegate {
 
     public let menu = NSMenu()
     private let summaryProvider: () -> StatusSummary
+    private let launchAtLogin: LaunchAtLoginController?
     private var rowItems: [NSMenuItem] = []
     private var isOpen = false
     private var lastRefreshAt: Double?
 
-    public init(summaryProvider: @escaping () -> StatusSummary) {
+    public init(summaryProvider: @escaping () -> StatusSummary, launchAtLogin: LaunchAtLoginController? = nil) {
         self.summaryProvider = summaryProvider
+        self.launchAtLogin = launchAtLogin
         super.init()
         menu.delegate = self
     }
 
     public func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let built = StatusMenuBuilder.build(for: summaryProvider())
+        let built = StatusMenuBuilder.build(for: summaryProvider(), launchAtLogin: launchAtLogin)
         for item in built.items {
             menu.addItem(item)
         }

@@ -14,11 +14,18 @@ public final class StatusItemController: NSObject {
     ///   again each frame while open. `AppDelegate` supplies one reading its current
     ///   `AgentState`; a `nil` state (e.g. before first tick) is its caller's concern, not
     ///   this type's.
-    public init(title: String, summaryProvider: @escaping () -> StatusSummary) {
+    /// - Parameter launchAtLogin: forwarded straight through to the underlying
+    ///   `LiveMenuController` so the "Launch at Login" row shows up in this dropdown too —
+    ///   see `StatusMenuBuilder.build(for:launchAtLogin:)`.
+    public init(
+        title: String,
+        summaryProvider: @escaping () -> StatusSummary,
+        launchAtLogin: LaunchAtLoginController? = nil
+    ) {
         // .variableLength, not .squareLength — the latter is sized for an icon-only
         // button and clips a text/emoji title.
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        liveMenu = LiveMenuController(summaryProvider: summaryProvider)
+        liveMenu = LiveMenuController(summaryProvider: summaryProvider, launchAtLogin: launchAtLogin)
         super.init()
         statusItem.button?.title = title
         statusItem.isVisible = true

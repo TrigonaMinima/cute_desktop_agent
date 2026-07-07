@@ -14,11 +14,17 @@ enum StatusMenuBuilder {
         let rowItems: [NSMenuItem]
     }
 
-    static func build(for summary: StatusSummary) -> Built {
+    /// - Parameter launchAtLogin: when non-nil, a "Launch at Login" toggle is inserted
+    ///   between the state rows and Quit, sharing the trailing separator. `nil` omits it
+    ///   entirely.
+    static func build(for summary: StatusSummary, launchAtLogin: LaunchAtLoginController? = nil) -> Built {
         // `rowItems` is built by walking sections/rows in the same nested order as
         // `orderedRows(for:)` below (by construction: both are just `sections` then each
         // section's `rows`) — that shared order is what lets a live refresh `zip` these
-        // items against `rowTitles(for:)`'s output.
+        // items against `rowTitles(for:)`'s output. The login-item toggle below is
+        // deliberately NOT added to `rowItems`: its title only changes across menu opens
+        // (registration is user- or System-Settings-driven, not per-frame state), so it
+        // doesn't need `refreshIfOpen`'s per-frame title push.
         var items: [NSMenuItem] = []
         var rowItems: [NSMenuItem] = []
         for section in summary.sections {
@@ -31,6 +37,17 @@ enum StatusMenuBuilder {
             }
         }
         items.append(.separator())
+        if let launchAtLogin {
+            let presentation = loginItemPresentation(for: launchAtLogin.status)
+            let toggle = NSMenuItem(
+                title: presentation.title,
+                action: #selector(LaunchAtLoginController.toggle(_:)),
+                keyEquivalent: "")
+            toggle.target = launchAtLogin
+            toggle.state = presentation.isChecked ? .on : .off
+            toggle.isEnabled = presentation.isEnabled
+            items.append(toggle)
+        }
         items.append(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         return Built(items: items, rowItems: rowItems)
     }
