@@ -1,10 +1,11 @@
 import Foundation
 
-// Mechanical port of electron-poc/renderer/blob.js lines 25-85. All helpers treat
-// `point`/the returned Point as the avatar's top-left corner (web space: top-left
-// origin, y grows down) — the same convention as the rest of AgentCore. Y-flip to
-// AppKit's bottom-left coordinate space happens only in AgentApp's
-// Perception/CoordinateSpace.swift, never here.
+// Target-picking geometry for wander/rest/peek — corner, border, and edge point
+// selection plus the on-screen visibility clamp. Ported unchanged from
+// electron-poc/renderer/blob.js (lines 25-85). All helpers treat `point`/the returned
+// Point as the avatar's top-left corner (web space: top-left origin, y grows down) —
+// the same convention as the rest of AgentCore. Y-flip to AppKit's bottom-left
+// coordinate space happens only in AgentApp's Perception/CoordinateSpace.swift, never here.
 
 public struct InnerBounds: Equatable {
     public let maxX: Double

@@ -1,9 +1,12 @@
 import Foundation
 
-// Mechanical port of the runtime behavior in electron-poc/renderer/blob.js (lines
-// ~90-431): startMode, transitionToNextMode, updateMovement, maybeAdvanceMode,
-// triggerHappy/updateHappy, updateBlink, updateEmotionTriggers/computeDesiredEmotion,
-// and the mousedown/mousemove/mouseup drag handlers.
+// The avatar's behavior state machine — mode selection, movement, drag, blink, and
+// emotion triggers. Its logic and literal timings are carried over unchanged from
+// electron-poc/renderer/blob.js (lines ~90-431): startMode, transitionToNextMode,
+// updateMovement, maybeAdvanceMode, triggerHappy/updateHappy, updateBlink,
+// updateEmotionTriggers/computeDesiredEmotion, and the mousedown/mousemove/mouseup drag
+// handlers — see each function's doc comment for where a literal looks inconsistent but
+// is preserved deliberately rather than "fixed" to look tidier.
 //
 // `StateMachine` is the sole writer of `AgentState` (see AgentState.swift's doc
 // comment) — everything else (Perception, AvatarView) reads a frozen copy each frame.

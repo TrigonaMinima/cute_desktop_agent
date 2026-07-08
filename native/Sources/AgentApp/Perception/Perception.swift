@@ -21,10 +21,12 @@ final class Perception {
     /// avoids a drag turning into a velocity spike.
     private var lastCursor: Point?
 
-    /// When the most recent keydown fired, per `clock` — 0 means "none observed yet"
-    /// (see `AgentCore.isTypingActive`'s doc comment). Written asynchronously by the
-    /// global monitor's handler, between polls, not by `poll` itself.
-    private var lastKeystrokeAt: Double = 0
+    /// When the most recent keydown fired, per `clock` — `nil` means "none observed
+    /// yet." Converted to `AgentCore.isTypingActive`'s `0`-sentinel contract at the call
+    /// boundary in `poll`, so the pure helper's tested "0 means none" behavior is
+    /// unaffected. Written asynchronously by the global monitor's handler, between
+    /// polls, not by `poll` itself.
+    private var lastKeystrokeAt: Double?
     private var keyDownMonitor: Any?
 
     /// `caretLocation` is synchronous cross-process AX IPC — it blocks on the *focused
@@ -34,7 +36,11 @@ final class Perception {
     /// report otherwise) and throttled to `caretPollIntervalMs` between queries, with
     /// `cachedTypingLocation` holding the most recent result in between.
     private static let caretPollIntervalMs: Double = 200
-    private var lastCaretQueryAt: Double = -.infinity
+    /// `nil` means "not currently throttled" — due to query it immediately. Distinct
+    /// from `lastKeystrokeAt`/`lastScrollAt`'s "not yet observed" `nil`: this one is
+    /// reset to `nil` on every not-typing frame (see `pollCaretLocation`), not just at
+    /// startup, so a throttle window never survives a typing pause.
+    private var lastCaretQueryAt: Double?
     private var cachedTypingLocation: Rect?
 
     /// Same synchronous cross-process AX IPC cost and throttle as `caretLocation` — see
@@ -43,15 +49,17 @@ final class Perception {
     /// re-query on app switch (`lastWindowPid` changing) rather than serving up to
     /// `windowPollIntervalMs` of a stale previous app's frame.
     private static let windowPollIntervalMs: Double = 200
-    private var lastWindowQueryAt: Double = -.infinity
+    /// `nil` means "not currently throttled" — same reset-on-no-signal shape as
+    /// `lastCaretQueryAt`, mirrored here for the no-frontmost-app case.
+    private var lastWindowQueryAt: Double?
     private var cachedFrontmostWindow: WindowInfo?
     private var lastWindowPid: pid_t?
 
-    /// When the most recent scroll-wheel event fired, per `clock` — 0 means "none
-    /// observed yet" (see `AgentCore.isScrollActive`'s doc comment). Written
-    /// asynchronously by the global monitor's handler, between polls, not by `poll`
-    /// itself — mirrors `lastKeystrokeAt`.
-    private var lastScrollAt: Double = 0
+    /// When the most recent scroll-wheel event fired, per `clock` — `nil` means "none
+    /// observed yet." Converted to `AgentCore.isScrollActive`'s `0`-sentinel contract at
+    /// the call boundary in `poll`, mirroring `lastKeystrokeAt`. Written asynchronously
+    /// by the global monitor's handler, between polls, not by `poll` itself.
+    private var lastScrollAt: Double?
     /// Scroll delta (points) accumulated since the last `poll` call, summed across
     /// however many scroll-wheel events fired in that window; `poll` converts this to
     /// px/sec and resets it. A *mouse* global monitor, unlike `keyDownMonitor` — needs
@@ -69,7 +77,8 @@ final class Perception {
         let promptOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(promptOptions)
         keyDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] _ in
-            self?.lastKeystrokeAt = self?.clock.now() ?? 0
+            guard let self else { return }
+            self.lastKeystrokeAt = self.clock.now()
         }
         scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self else { return }
@@ -92,12 +101,7 @@ final class Perception {
     /// is derived here via `AgentCore.cursorVelocity` rather than read from the OS. The
     /// first poll has no prior frame to diff against; `cursorVelocity` floors that (and any
     /// `dt <= 0`) to zero rather than dividing by zero/negative.
-    func poll(
-        screenFrame: NSRect, dt: Double
-    ) -> (
-        cursor: Point, cursorVelocity: Vector, frontmostApp: AppInfo?, frontmostWindow: WindowInfo?,
-        typing: Bool, typingLocation: Rect?, scrolling: Bool, scrollVelocity: Vector
-    ) {
+    func poll(screenFrame: NSRect, dt: Double) -> PerceptionSnapshot {
         let cursor = CoordinateSpace.webPoint(fromGlobal: NSEvent.mouseLocation, screenFrame: screenFrame)
         // No prior sample on the first poll (`lastCursor == nil`) — fall back to `cursor`
         // itself so `from == to` and the numerator is zero, letting `cursorVelocity` own all
@@ -112,18 +116,24 @@ final class Perception {
         }
         let now = clock.now()
         let frontmostWindow = pollFrontmostWindow(app: frontmostRunningApp, now: now)
+        // `?? 0` converts this class's "not observed yet" `nil` to
+        // `isTypingActive`/`isScrollActive`'s own "not observed yet" `0` sentinel —
+        // their tested contract stays untouched, only the boundary crossing it.
         let typing = isTypingActive(
-            lastKeystrokeAt: lastKeystrokeAt, now: now, timeoutMs: Constants.typingIdleTimeoutMs
+            lastKeystrokeAt: lastKeystrokeAt ?? 0, now: now, timeoutMs: Constants.typingIdleTimeoutMs
         )
         let typingLocation = pollCaretLocation(typing: typing, now: now)
         let scrolling = isScrollActive(
-            lastScrollAt: lastScrollAt, now: now, timeoutMs: Constants.scrollActiveTimeoutMs
+            lastScrollAt: lastScrollAt ?? 0, now: now, timeoutMs: Constants.scrollActiveTimeoutMs
         )
         // Reuses `cursorVelocity`'s tested dt<=0 guard via its Vector-delta overload
         // rather than re-deriving it.
         let scrollVelocity = AgentCore.cursorVelocity(from: pendingScrollDelta, dt: dt)
         pendingScrollDelta = Vector(dx: 0, dy: 0)
-        return (cursor, velocity, frontmostApp, frontmostWindow, typing, typingLocation, scrolling, scrollVelocity)
+        return PerceptionSnapshot(
+            cursor: cursor, cursorVelocity: velocity, frontmostApp: frontmostApp, frontmostWindow: frontmostWindow,
+            typing: typing, typingLocation: typingLocation, scrolling: scrolling, scrollVelocity: scrollVelocity
+        )
     }
 
     /// Gates and throttles the expensive AX caret query — see `caretPollIntervalMs`'s doc
@@ -132,10 +142,10 @@ final class Perception {
     private func pollCaretLocation(typing: Bool, now: Double) -> Rect? {
         guard typing else {
             cachedTypingLocation = nil
-            lastCaretQueryAt = -.infinity
+            lastCaretQueryAt = nil
             return nil
         }
-        if now - lastCaretQueryAt >= Self.caretPollIntervalMs {
+        if Self.isDue(lastCaretQueryAt, now: now, interval: Self.caretPollIntervalMs) {
             cachedTypingLocation = caretLocation()
             lastCaretQueryAt = now
         }
@@ -148,17 +158,24 @@ final class Perception {
     private func pollFrontmostWindow(app: NSRunningApplication?, now: Double) -> WindowInfo? {
         guard let app else {
             cachedFrontmostWindow = nil
-            lastWindowQueryAt = -.infinity
+            lastWindowQueryAt = nil
             lastWindowPid = nil
             return nil
         }
         let pidChanged = app.processIdentifier != lastWindowPid
-        if pidChanged || now - lastWindowQueryAt >= Self.windowPollIntervalMs {
+        if pidChanged || Self.isDue(lastWindowQueryAt, now: now, interval: Self.windowPollIntervalMs) {
             cachedFrontmostWindow = frontmostWindowInfo(app: app)
             lastWindowQueryAt = now
             lastWindowPid = app.processIdentifier
         }
         return cachedFrontmostWindow
+    }
+
+    /// Shared throttle check for `pollCaretLocation`/`pollFrontmostWindow`: `nil` means "not
+    /// currently throttled" (due immediately), otherwise due once `interval` has elapsed
+    /// since `lastAt`.
+    private static func isDue(_ lastAt: Double?, now: Double, interval: Double) -> Bool {
+        lastAt.map { now - $0 >= interval } ?? true
     }
 
     /// Best-effort frontmost-window geometry via the Accessibility API: the app's AX

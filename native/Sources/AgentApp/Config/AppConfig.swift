@@ -8,7 +8,16 @@ public struct AppConfig: Decodable {
     public let displayName: String
     public let bundleIdentifier: String
     public let statusItemTitle: String
-    public let avatar: String
+    public let avatar: AvatarKind
+}
+
+/// The set of `Avatar` conformers `config.json`'s `avatar` field may name. Decoding
+/// straight into this enum (rather than resolving a raw `String` later in `makeAvatar`)
+/// turns an unrecognized `avatar` value into a config decode error, caught by
+/// `AppConfig.loadFromBundle`'s caller, instead of a `fatalError` reached deep inside
+/// avatar selection.
+public enum AvatarKind: String, Decodable {
+    case slime
 }
 
 public enum AppConfigError: Error {
@@ -28,13 +37,14 @@ public extension AppConfig {
     }
 
     /// Selects the `Avatar` conformer named by `config.avatar`. Adding a new avatar means
-    /// adding a sibling conformer under `Render/Avatars/` and a case here — nothing else
-    /// in the render layer changes. This is the one place outside `SlimeAvatar.swift`
-    /// allowed to name that type — see the comment there.
+    /// adding a sibling conformer under `Render/Avatars/` and a case to `AvatarKind` —
+    /// nothing else in the render layer changes. This is the one place outside
+    /// `SlimeAvatar.swift` allowed to name that type — see the comment there. The switch
+    /// is exhaustive (no `default`): a new `AvatarKind` case with no matching arm here is
+    /// a compile error, not a runtime crash.
     func makeAvatar() -> Avatar {
         switch avatar {
-        case "slime": return SlimeAvatar()
-        default: fatalError("AgentApp: unknown avatar '\(avatar)' in config.json")
+        case .slime: return SlimeAvatar()
         }
     }
 }

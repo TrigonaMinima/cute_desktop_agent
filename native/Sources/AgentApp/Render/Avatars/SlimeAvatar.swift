@@ -8,11 +8,12 @@ import AgentCore
 // makeAvatar()` is the sole place outside this file that names the type — it's the config-
 // driven selection point the plan itself calls out, not a naming-discipline leak.
 //
-// Mechanical port of electron-poc/renderer/index.html's #blob layer tree and
-// styles.css's #blob/.eye/.mouth/.blush rules (dome body #bfe8fb, navy #1c3b5a line-art
-// faces, pink #f7a8c4 blush). Body dome bezier and inset gloss/shadow are a first-pass
-// approximation of the CSS multi-radius `border-radius`/`box-shadow` — exact visual
-// tuning is Phase 6 polish, not blocking here.
+// The slime avatar's concrete geometry and colors — layer tree and dome/eye/mouth/blush
+// styling. Values are carried over unchanged from electron-poc/renderer/index.html's
+// #blob layer tree and styles.css's #blob/.eye/.mouth/.blush rules (dome body #bfe8fb,
+// navy #1c3b5a line-art faces, pink #f7a8c4 blush). Body dome bezier and inset
+// gloss/shadow are a first-pass approximation of the CSS multi-radius
+// `border-radius`/`box-shadow` — exact visual tuning is Phase 6 polish, not blocking here.
 public struct SlimeAvatar: Avatar {
     // MARK: Body footprint + colors (electron-poc/renderer/styles.css `#blob`)
 

@@ -1,9 +1,9 @@
 import Foundation
 
-// Mechanical port of blob.js's computeDesiredEmotion. Pure: reads a frozen AgentState,
-// touches no RNG/Clock, so — unlike the rest of StateMachine's ported functions — it
-// lives as a free function rather than a method, alongside Math/Geometry.swift's other
-// pure helpers.
+// The desired-emotion priority ladder, carried over unchanged from blob.js's
+// computeDesiredEmotion. Pure: reads a frozen AgentState, touches no RNG/Clock, so —
+// unlike the rest of StateMachine's ported functions — it lives as a free function
+// rather than a method, alongside Math/Geometry.swift's other pure helpers.
 
 /// Priority ladder (highest first): dragging -> surprised, happy mode -> happy, active
 /// quirk, active proximity startle, else the base emotion for the mode.

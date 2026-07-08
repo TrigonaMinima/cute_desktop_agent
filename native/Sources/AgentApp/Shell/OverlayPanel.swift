@@ -7,8 +7,10 @@ import AppKit
 /// ever steal activation from whatever app the user is actually using — perception's
 /// `frontmostApplication` read must stay truthful even while the avatar is on screen.
 ///
-/// This phase always ignores mouse events — per-tick hover hit-testing that flips this
-/// only while the cursor is over the avatar (mirroring the Phase 0 spike) is Phase 5 work.
+/// Starts with mouse events ignored (fully click-through). `AppDelegate.updateHitTest`
+/// flips `ignoresMouseEvents` off once a frame while the cursor is hovering the avatar
+/// (or a drag is in progress) and back on otherwise, so the window only intercepts
+/// events right around the avatar itself.
 public final class OverlayPanel: NSPanel {
     public override var canBecomeKey: Bool { false }
     public override var canBecomeMain: Bool { false }

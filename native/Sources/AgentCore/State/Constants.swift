@@ -1,9 +1,12 @@
 import Foundation
 
-// Mechanical port of the avatar-agnostic constants in electron-poc/renderer/blob.js
-// (lines 90-124). Deliberately excludes BLOB_WIDTH/BLOB_HEIGHT/BLOB_SIZE — the active
-// avatar's footprint flows in as `AgentBody.size` (set from `Avatar.intrinsicSize` at
-// launch), not a hard-coded constant, so a future non-slime avatar with a different
+// Tuned behavior constants for the avatar-agnostic parts of the state machine — mode
+// weights, dwell/blink/quirk timing, roam/rest geometry. Values are carried over
+// unchanged from electron-poc/renderer/blob.js's tuning (lines 90-124), not rederived —
+// see the individual quirk comments below for where a value looks inconsistent but is
+// preserved deliberately. Deliberately excludes BLOB_WIDTH/BLOB_HEIGHT/BLOB_SIZE — the
+// active avatar's footprint flows in as `AgentBody.size` (set from `Avatar.intrinsicSize`
+// at launch), not a hard-coded constant, so a future non-slime avatar with a different
 // footprint needs no change here.
 public enum Constants {
     /// Shorthand for the (min, max) ms ranges `randomRange` draws from — used

@@ -1,10 +1,10 @@
 import Foundation
 
-/// Per-frame squash/stretch scale + vertical bob, mechanically ported from
-/// electron-poc/renderer/blob.js's `render()` transform math. A pure function of
-/// `(state, now)` — like `computeDesiredEmotion` — so it needs no injected Clock and is
-/// fully unit-testable; the AppKit render layer calls this every tick and applies the
-/// result to the body layer's `transform`.
+/// Per-frame squash/stretch scale + vertical bob for the avatar body. The transform math
+/// is carried over unchanged from electron-poc/renderer/blob.js's `render()`. A pure
+/// function of `(state, now)` — like `computeDesiredEmotion` — so it needs no injected
+/// Clock and is fully unit-testable; the AppKit render layer calls this every tick and
+/// applies the result to the body layer's `transform`.
 public struct BodyMotion: Equatable {
     public var scaleX: Double
     public var scaleY: Double

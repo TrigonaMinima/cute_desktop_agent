@@ -1,7 +1,8 @@
 import Foundation
 
-// Mechanical port of the pure helpers in electron-poc/renderer/blob.js (lines 1-23).
-// No Date.now()/Math.random() inside — RNG is always injected as an argument, which is
+// Pure geometry and weighted-selection helpers used throughout the behavior core.
+// Ported unchanged from electron-poc/renderer/blob.js (lines 1-23). No
+// Date.now()/Math.random() inside — RNG is always injected as an argument, which is
 // what makes these (and everything built on top of them) unit-testable.
 
 public func clamp(_ value: Double, min: Double, max: Double) -> Double {
