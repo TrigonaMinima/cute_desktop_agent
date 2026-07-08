@@ -22,6 +22,7 @@ make native-run       # native-build, then open the assembled .app
 make native-clean     # rm -rf native/.build native/build
 make electron-run     # launch the Electron POC for side-by-side comparison
 make electron-install # npm install in electron-poc/
+make reactions        # (re)generate reactions/*.svg + *.png — see "Reactions / avatar assets" below
 make clean            # native-clean + electron-clean
 ```
 
@@ -119,6 +120,18 @@ loop. Because both surfaces are built from the identical builder/controller pair
 - `make native-run` always launches the assembled `.app` bundle, never a raw binary —
   `config.json` and other resources are only present inside the bundle.
 
+
+## Reactions / avatar assets
+
+`reactions/` holds standalone SVG/PNG exports of every face Jiggy can show (see
+`reactions/README.md`), mechanically generated from the render code by
+`reactions/generate_reactions.py` (`make reactions`).
+
+Any new reaction — or any update to an existing reaction — must be **generated and
+saved as an asset in `reactions/` first**, then presented to the user for
+**confirmation before moving on to any subsequent step**. Do not wire a new or
+changed reaction into further work (avatar code, docs, anything else) until the
+user has reviewed the generated asset.
 
 ## Instructions
 

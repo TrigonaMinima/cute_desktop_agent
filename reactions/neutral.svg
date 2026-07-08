@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -32 102 122" width="408" height="488">
+  <title>Jiggy - neutral</title>
+  <defs>
+    <filter id="bodyShadow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="10" stdDeviation="4" flood-color="rgb(20,60,100)" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <g filter="url(#bodyShadow)">
+    <path d="M 39.0,0 L 39.0,0 C 60.539699999999996,0 78.0,19.43018 78.0,43.4 L 78.0,43.400000000000006 C 78.0,53.67278 61.936524,62.0 42.12,62.0 L 35.88,62.0 C 16.063476,62.0 0,53.67278 0,43.400000000000006 L 0,43.4 C 0,19.43018 17.4603,0 39.0,0 Z" fill="#BFE8FB"/>
+  </g>
+  <g transform="translate(24.9600,13.6400) rotate(-20) translate(-14.0400,-7.4400)"><ellipse cx="14.04" cy="7.4399999999999995" rx="14.04" ry="7.4399999999999995" fill="rgba(255,255,255,0.9)"/></g>
+  <g transform="translate(11.3100,22.6300) rotate(0) translate(-3.5100,-2.7900)"><ellipse cx="3.51" cy="2.79" rx="3.51" ry="2.79" fill="rgba(255,255,255,0.75)"/></g>
+  <g transform="translate(23.8800,28.7800) rotate(-6) translate(-7.5000,-1.5000)"><rect x="0" y="0" width="15" height="3" rx="1.5" ry="1.5" fill="#1C3B5A"/></g>
+  <g transform="translate(54.3000,28.7800) rotate(6) translate(-7.5000,-1.5000)"><rect x="0" y="0" width="15" height="3" rx="1.5" ry="1.5" fill="#1C3B5A"/></g>
+  
+  
+  
+</svg>

@@ -1,4 +1,4 @@
-.PHONY: native-build native-run native-test native-clean electron-run electron-install electron-clean clean
+.PHONY: native-build native-run native-test native-clean electron-run electron-install electron-clean clean reactions
 
 # --- Native (Swift/AppKit) ---
 
@@ -35,6 +35,13 @@ electron-run:
 
 electron-clean:
 	$(MAKE) -C electron-poc clean
+
+# --- Reaction sheet (reactions/, see reactions/README.md) ---
+
+reactions:
+	python3 reactions/generate_reactions.py
+	qlmanage -t -s 512 -o reactions reactions/*.svg >/dev/null 2>&1
+	@for f in reactions/*.svg; do mv "$$f.png" "$${f%.svg}.png"; done
 
 # --- Both ---
 
