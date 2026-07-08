@@ -47,6 +47,7 @@ public extension AgentState {
                 .init(label: "Position", value: StatusSummary.formatPoint(body.position)),
                 .init(label: "Target", value: StatusSummary.formatPoint(body.target)),
                 .init(label: "Size", value: StatusSummary.formatSize(body.size)),
+                .init(label: "Avoiding", value: body.attentionZone.map(StatusSummary.formatRect) ?? "\u{2014}"),
             ]),
             StatusSummary.Section(title: "World", rows: [
                 .init(label: "Cursor", value: StatusSummary.formatPoint(world.cursor)),
@@ -67,6 +68,10 @@ public extension AgentState {
                     label: "Proximity cooldown",
                     value: StatusSummary.formatCountdown(target: memory.proximityCooldownUntil, now: now)
                 ),
+                .init(
+                    label: "Yield cooldown",
+                    value: StatusSummary.formatCountdown(target: memory.yieldCooldownUntil, now: now)
+                ),
             ]),
         ])
     }
@@ -84,6 +89,7 @@ private extension StatusSummary {
         case .rest: return "Resting"
         case .peek: return "Peeking"
         case .happy: return "Happy"
+        case .flee: return "Fleeing"
         }
     }
 

@@ -84,10 +84,17 @@ public struct AgentBody: Codable, Equatable {
     public var dragging: Bool
     public var dragOffset: Vector
     public var size: Size
+    /// The region (web space) the agent is currently avoiding — derived each tick from
+    /// `AgentWorld` by `attentionZone(from:)` (see Behavior/Attention.swift). Beyond
+    /// blob.js parity: net-new attention-avoidance state. Lives in `body`, not `world`,
+    /// because it's a StateMachine-derived belief, not a raw perceived signal — honors
+    /// the single-writer rule (Perception owns `world` exclusively). `nil` when there's
+    /// nothing to avoid this frame.
+    public var attentionZone: Rect?
 
     public init(
         position: Point, mode: Mode, target: Point, moving: Bool, emotion: Emotion,
-        dragging: Bool, dragOffset: Vector, size: Size
+        dragging: Bool, dragOffset: Vector, size: Size, attentionZone: Rect? = nil
     ) {
         self.position = position
         self.mode = mode
@@ -97,6 +104,7 @@ public struct AgentBody: Codable, Equatable {
         self.dragging = dragging
         self.dragOffset = dragOffset
         self.size = size
+        self.attentionZone = attentionZone
     }
 }
 
@@ -120,11 +128,16 @@ public struct AgentMemory: Codable, Equatable {
     public var nextQuirkAt: Double
     public var proximityUntil: Double
     public var proximityCooldownUntil: Double
+    /// Short lockout (ms timestamp) after a flee resolves, before another overlap can
+    /// re-trigger `.flee` — prevents frame-to-frame thrashing while the caret keeps
+    /// moving near the avatar. Beyond blob.js parity: see Behavior/Attention.swift.
+    public var yieldCooldownUntil: Double
 
     public init(
         modeEndsAt: Double, happyUntil: Double, happyResumeMode: Mode, pendingReturn: Bool,
         nextBlinkAt: Double, blinking: Bool, blinkEndsAt: Double, quirkEmotion: Emotion?,
-        quirkUntil: Double, nextQuirkAt: Double, proximityUntil: Double, proximityCooldownUntil: Double
+        quirkUntil: Double, nextQuirkAt: Double, proximityUntil: Double, proximityCooldownUntil: Double,
+        yieldCooldownUntil: Double = 0
     ) {
         self.modeEndsAt = modeEndsAt
         self.happyUntil = happyUntil
@@ -138,6 +151,7 @@ public struct AgentMemory: Codable, Equatable {
         self.nextQuirkAt = nextQuirkAt
         self.proximityUntil = proximityUntil
         self.proximityCooldownUntil = proximityCooldownUntil
+        self.yieldCooldownUntil = yieldCooldownUntil
     }
 }
 

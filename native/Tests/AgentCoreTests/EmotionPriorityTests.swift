@@ -65,6 +65,13 @@ struct EmotionPriorityTests {
         #expect(computeDesiredEmotion(state: state, now: 1000) == .curious)
     }
 
+    @Test func baseEmotion_flee_isSurprised() {
+        // Net-new, beyond blob.js parity: a polite "oops, you're here" reaction to
+        // yielding the user's attention zone — see Constants.baseEmotionByMode.
+        let state = TestFixtures.makeState(mode: .flee)
+        #expect(computeDesiredEmotion(state: state, now: 1000) == .surprised)
+    }
+
     @Test func blushStyleByEmotion_mapsQuirkAndHappyToHatch_othersToPlainOrNone() {
         #expect(Constants.blushStyleByEmotion[.blush] == .hatch)
         #expect(Constants.blushStyleByEmotion[.happy] == .hatch)

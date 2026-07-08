@@ -52,6 +52,65 @@ struct StateMachineTransitionTests {
         #expect(state.memory.modeEndsAt == 999)
     }
 
+    // MARK: - startMode: .flee is trigger-only (never chosen by weightedChoice; target
+    // always supplied by maybeYield before startMode(.flee, ...) is called).
+
+    @Test func startMode_flee_setsMovingTrue_leavesTargetAndModeEndsAtUntouched() {
+        let sm = StateMachine(rng: SeededRandom(seed: 3), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState()
+        state.body.target = Point(x: 321, y: 456) // sentinel: startMode(.flee) must not overwrite this
+        state.memory.modeEndsAt = 999 // sentinel
+        sm.startMode(.flee, state: &state, now: 1000)
+        #expect(state.body.mode == .flee)
+        #expect(state.body.moving == true)
+        #expect(state.body.target == Point(x: 321, y: 456))
+        #expect(state.memory.modeEndsAt == 999)
+    }
+
+    // MARK: - startMode: polite bias (net-new, beyond blob.js parity — wander/rest/peek
+    // targets favor whichever edge/corner is farthest from the current activity anchor,
+    // via farthestIndex, replacing a uniform randomIndex).
+
+    @Test func startMode_wander_biasesTowardEdgeFarthestFromCursorAnchor() {
+        let sm = StateMachine(rng: SeededRandom(seed: 5), clock: ManualClock(start: 0))
+        var state = TestFixtures.makeState()
+        state.world.cursor = Point(x: 500, y: 10) // near top-center
+        sm.startMode(.wander, state: &state, now: 0)
+        // The farthest border band from a near-top-center anchor is the bottom strip.
+        #expect(state.body.target.y > TestFixtures.bounds.height / 2)
+    }
+
+    @Test func startMode_wander_usesTypingCaretAsAnchor_notCursor_whenTyping() {
+        let sm = StateMachine(rng: SeededRandom(seed: 5), clock: ManualClock(start: 0))
+        var state = TestFixtures.makeState(
+            typing: true, typingLocation: Rect(origin: Point(x: 495, y: 0), size: Size(width: 10, height: 20))
+        )
+        // Cursor sits bottom-left (would bias toward the top-right if it were the anchor).
+        state.world.cursor = Point(x: 20, y: 718)
+        sm.startMode(.wander, state: &state, now: 0)
+        // The caret (top-center) should still be the anchor, biasing toward the bottom strip.
+        #expect(state.body.target.y > TestFixtures.bounds.height / 2)
+    }
+
+    @Test func startMode_rest_biasesTowardCornerFarthestFromCursorAnchor() {
+        let sm = StateMachine(rng: SeededRandom(seed: 6), clock: ManualClock(start: 0))
+        var state = TestFixtures.makeState()
+        state.world.cursor = Point(x: 20, y: 20) // top-left
+        sm.startMode(.rest, state: &state, now: 0)
+        let inner = innerBounds(bounds: TestFixtures.bounds, margin: Constants.restMargin, blobSize: TestFixtures.blobSize)
+        // Farthest corner from top-left is bottom-right — deterministic, no rng involved.
+        #expect(state.body.target == Point(x: inner.maxX, y: inner.maxY))
+    }
+
+    @Test func startMode_peek_biasesTowardEdgeFarthestFromCursorAnchor() {
+        let sm = StateMachine(rng: SeededRandom(seed: 7), clock: ManualClock(start: 0))
+        var state = TestFixtures.makeState()
+        state.world.cursor = Point(x: 500, y: 10) // near top-center
+        sm.startMode(.peek, state: &state, now: 0)
+        // Farthest edge is the bottom — pickEdgeTarget's bottom case sits near bounds.height.
+        #expect(state.body.target.y > TestFixtures.bounds.height / 2)
+    }
+
     // MARK: - updateMovement: arrival sets modeEndsAt for the *current* mode; peek sets pendingReturn.
 
     @Test func updateMovement_onArrival_setsModeEndsAtForCurrentMode() {
@@ -116,6 +175,38 @@ struct StateMachineTransitionTests {
         #expect(state.body.position == Point(x: 5, y: 5))
     }
 
+    // MARK: - updateMovement: .flee moves at fleeSpeed (net-new, beyond blob.js parity)
+    // and its arrival sets yieldCooldownUntil, on top of the shared arrival branch.
+
+    @Test func updateMovement_flee_movesAtFleeSpeedNotMoveSpeed() {
+        let sm = StateMachine(rng: SeededRandom(seed: 1), clock: ManualClock(start: 0))
+        var state = TestFixtures.makeState(mode: .flee, position: Point(x: 0, y: 0))
+        state.body.target = Point(x: 500, y: 0)
+        state.body.moving = true
+        sm.updateMovement(state: &state, dt: 0.5, now: 0) // step = fleeSpeed(220) * 0.5 = 110
+        #expect(state.body.position.x.isApproximately(110))
+    }
+
+    @Test func updateMovement_flee_onArrival_setsYieldCooldownUntil() {
+        let sm = StateMachine(rng: SeededRandom(seed: 2), clock: ManualClock(start: 5000))
+        var state = TestFixtures.makeState(mode: .flee, position: Point(x: 100, y: 100))
+        state.body.target = Point(x: 101, y: 100) // within arriveThreshold
+        state.body.moving = true
+        sm.updateMovement(state: &state, dt: 0.016, now: 5000)
+        #expect(state.body.moving == false)
+        #expect(state.memory.yieldCooldownUntil == 5000 + Constants.yieldCooldownMs)
+    }
+
+    @Test func updateMovement_nonFlee_onArrival_leavesYieldCooldownUntouched() {
+        let sm = StateMachine(rng: SeededRandom(seed: 2), clock: ManualClock(start: 5000))
+        var state = TestFixtures.makeState(mode: .wander, position: Point(x: 100, y: 100))
+        state.body.target = Point(x: 101, y: 100)
+        state.body.moving = true
+        state.memory.yieldCooldownUntil = 42
+        sm.updateMovement(state: &state, dt: 0.016, now: 5000)
+        #expect(state.memory.yieldCooldownUntil == 42)
+    }
+
     // MARK: - maybeAdvanceMode
 
     @Test func maybeAdvanceMode_peekPendingReturn_pastModeEndsAt_transitionsToWander() {
@@ -155,6 +246,17 @@ struct StateMachineTransitionTests {
         state.memory.modeEndsAt = 0
         sm.maybeAdvanceMode(state: &state, now: 100)
         #expect(Mode.allCases.contains(state.body.mode))
+    }
+
+    @Test func transitionToNextMode_neverEmitsFlee_acrossManySeeds() {
+        // .flee is trigger-only (excluded from Constants.modeWeights) — weightedChoice
+        // must never produce it, across a wide spread of seeds.
+        for seed in 0..<200 {
+            let sm = StateMachine(rng: SeededRandom(seed: UInt64(seed)), clock: ManualClock(start: 0))
+            var state = TestFixtures.makeState()
+            sm.transitionToNextMode(state: &state, now: 0)
+            #expect(state.body.mode != .flee)
+        }
     }
 
     // MARK: - triggerHappy / updateHappy
@@ -394,6 +496,125 @@ struct StateMachineTransitionTests {
         state.memory.modeEndsAt = 10_000
         sm.tick(state: &state, dt: 0.5)
         #expect(state.body.emotion == .sleepy)
+    }
+
+    // MARK: - maybeYield: reactive attention-avoidance (net-new, beyond blob.js parity —
+    // see Behavior/Attention.swift, Math/Avoidance.swift). Unlike the functions above,
+    // these set `state.body.attentionZone` directly rather than deriving it from
+    // `state.world` — that derivation is `tick`'s job (see the tick_* tests below), so
+    // these isolate `maybeYield`'s own decision logic.
+
+    @Test func maybeYield_bodyOverlapsAttentionZone_entersFleeWithEscapeTarget() {
+        let sm = StateMachine(rng: SeededRandom(seed: 40), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .wander, position: Point(x: 100, y: 100))
+        state.body.target = Point(x: 500, y: 500)
+        state.body.moving = true
+        let zone = Rect(origin: Point(x: 120, y: 110), size: Size(width: 20, height: 20))
+        state.body.attentionZone = zone
+        sm.maybeYield(state: &state, now: 1000)
+        #expect(state.body.mode == .flee)
+        #expect(state.body.moving == true)
+        let expectedTarget = escapePoint(
+            avatarPosition: Point(x: 100, y: 100), avatarSize: TestFixtures.blobSize, zone: zone,
+            bounds: TestFixtures.bounds, padding: Constants.escapePadding, minVisible: Constants.minVisible
+        )
+        #expect(state.body.target == expectedTarget)
+    }
+
+    @Test func maybeYield_whileDragging_doesNotFlee() {
+        let sm = StateMachine(rng: SeededRandom(seed: 41), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .idle, position: Point(x: 100, y: 100))
+        state.body.dragging = true
+        state.body.attentionZone = Rect(origin: Point(x: 100, y: 100), size: Size(width: 20, height: 20))
+        sm.maybeYield(state: &state, now: 1000)
+        #expect(state.body.mode == .idle)
+    }
+
+    @Test func maybeYield_whileHappy_doesNotFlee() {
+        let sm = StateMachine(rng: SeededRandom(seed: 42), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .happy, position: Point(x: 100, y: 100))
+        state.body.attentionZone = Rect(origin: Point(x: 100, y: 100), size: Size(width: 20, height: 20))
+        sm.maybeYield(state: &state, now: 1000)
+        #expect(state.body.mode == .happy)
+    }
+
+    @Test func maybeYield_duringYieldCooldown_doesNotRetrigger() {
+        let sm = StateMachine(rng: SeededRandom(seed: 43), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .wander, position: Point(x: 100, y: 100))
+        state.body.attentionZone = Rect(origin: Point(x: 100, y: 100), size: Size(width: 20, height: 20))
+        state.memory.yieldCooldownUntil = 5000
+        sm.maybeYield(state: &state, now: 1000)
+        #expect(state.body.mode == .wander)
+    }
+
+    @Test func maybeYield_noOverlapAndNoCursorContact_doesNotFlee() {
+        let sm = StateMachine(rng: SeededRandom(seed: 44), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(
+            mode: .wander, position: Point(x: 100, y: 100), cursor: Point(x: 900, y: 700)
+        )
+        state.body.attentionZone = nil
+        sm.maybeYield(state: &state, now: 1000)
+        #expect(state.body.mode == .wander)
+    }
+
+    @Test func maybeYield_cursorOverlapsAvatarWhileTyping_entersFlee() {
+        let sm = StateMachine(rng: SeededRandom(seed: 45), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(
+            mode: .idle, position: Point(x: 100, y: 100), cursor: Point(x: 130, y: 120), typing: true
+        )
+        // No typingLocation -> attentionZone stays nil; only cursor contact should flee here.
+        state.body.attentionZone = nil
+        sm.maybeYield(state: &state, now: 1000)
+        #expect(state.body.mode == .flee)
+    }
+
+    @Test func maybeYield_cursorOverlapsAvatarWhileIdle_doesNotFlee_preservingDraggability() {
+        let sm = StateMachine(rng: SeededRandom(seed: 46), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(
+            mode: .idle, position: Point(x: 100, y: 100), cursor: Point(x: 130, y: 120)
+        )
+        state.body.attentionZone = nil
+        sm.maybeYield(state: &state, now: 1000)
+        #expect(state.body.mode == .idle)
+    }
+
+    // MARK: - tick: full attention-avoidance integration (zone derived from state.world,
+    // top of tick, always — even while dragging).
+
+    @Test func tick_attentionZoneOverlapsAvatar_entersFleeMode() {
+        let sm = StateMachine(rng: SeededRandom(seed: 50), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .wander, position: Point(x: 100, y: 100))
+        state.body.target = Point(x: 500, y: 500)
+        state.body.moving = true
+        state.memory.modeEndsAt = 999_999 // keep maybeAdvanceMode from firing mid-test
+        state.world.typing = true
+        state.world.typingLocation = Rect(origin: Point(x: 120, y: 110), size: Size(width: 10, height: 10))
+        sm.tick(state: &state, dt: 0.016)
+        #expect(state.body.mode == .flee)
+        #expect(state.body.attentionZone != nil)
+    }
+
+    @Test func tick_noAttentionOverlap_doesNotEnterFlee() {
+        let sm = StateMachine(rng: SeededRandom(seed: 51), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(
+            mode: .wander, position: Point(x: 100, y: 100), cursor: Point(x: 900, y: 700)
+        )
+        state.body.target = Point(x: 500, y: 500)
+        state.body.moving = true
+        state.memory.modeEndsAt = 999_999
+        sm.tick(state: &state, dt: 0.016)
+        #expect(state.body.mode != .flee)
+    }
+
+    @Test func tick_whileDragging_stillComputesAttentionZone_butSuppressesFlee() {
+        let sm = StateMachine(rng: SeededRandom(seed: 52), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .idle, position: Point(x: 100, y: 100))
+        state.body.dragging = true
+        state.world.typing = true
+        state.world.typingLocation = Rect(origin: Point(x: 100, y: 100), size: Size(width: 10, height: 10))
+        sm.tick(state: &state, dt: 0.016)
+        #expect(state.body.attentionZone != nil) // still surfaced for display/menu rows
+        #expect(state.body.mode == .idle) // dragging suppresses the flee reaction itself
     }
 }
 

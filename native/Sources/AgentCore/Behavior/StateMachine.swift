@@ -28,8 +28,13 @@ public final class StateMachine {
     /// running even mid-drag, matching the JS original's unconditional tail of `tick()`.
     public func tick(state: inout AgentState, dt: Double) {
         let now = clock.now()
+        // Net-new, beyond blob.js parity: derive the region to avoid every tick, even
+        // while dragging — it's surfaced in the menu/status rows regardless, and
+        // `maybeYield` below is what actually gates the reaction on not-dragging.
+        state.body.attentionZone = attentionZone(from: state.world)
         if !state.body.dragging {
             updateHappy(state: &state, now: now)
+            maybeYield(state: &state, now: now)
             updateMovement(state: &state, dt: dt, now: now)
             maybeAdvanceMode(state: &state, now: now)
         }
@@ -65,7 +70,8 @@ public final class StateMachine {
                 quirkUntil: 0,
                 nextQuirkAt: now + randomRange(Constants.initialQuirkDelayMsRange),
                 proximityUntil: 0,
-                proximityCooldownUntil: 0
+                proximityCooldownUntil: 0,
+                yieldCooldownUntil: 0
             )
         )
     }
@@ -115,9 +121,19 @@ public final class StateMachine {
 
     func startMode(_ mode: Mode, state: inout AgentState, now: Double) {
         state.body.mode = mode
+        // Polite bias (net-new, beyond blob.js parity — see Math/Avoidance.swift): shared
+        // by wander/rest/peek below via `biasedIndex`, each picks the edge/corner farthest
+        // from the current activity anchor instead of a uniform index.
+        let anchor = activityAnchor(from: state.world)
         switch mode {
         case .wander:
-            let edgeIndex = randomIndex(4)
+            let edgeCandidates = (0..<4).map {
+                pickBorderPoint(
+                    bounds: state.world.screenBounds, margin: Constants.roamMargin, blobSize: state.body.size,
+                    bandDepth: Constants.borderBandDepth, edgeIndex: $0, rngAlong: 0.5, rngDepth: 0.5
+                )
+            }
+            let edgeIndex = biasedIndex(anchor: anchor, candidates: edgeCandidates)
             let rngAlong = rng.nextUnit()
             let rngDepth = rng.nextUnit()
             state.body.target = pickBorderPoint(
@@ -126,18 +142,31 @@ public final class StateMachine {
             )
             state.body.moving = true
         case .rest:
-            let cornerIndex = randomIndex(4)
-            state.body.target = pickCorner(
-                bounds: state.world.screenBounds, margin: Constants.restMargin, blobSize: state.body.size,
-                cornerIndex: cornerIndex
-            )
+            // Corners have no randomness of their own, so the candidates themselves are
+            // the four possible final targets.
+            let cornerCandidates = (0..<4).map {
+                pickCorner(
+                    bounds: state.world.screenBounds, margin: Constants.restMargin, blobSize: state.body.size,
+                    cornerIndex: $0
+                )
+            }
+            state.body.target = cornerCandidates[biasedIndex(anchor: anchor, candidates: cornerCandidates)]
             state.body.moving = true
         case .peek:
-            let edgeIndex = randomIndex(4)
+            let edgeCandidates = (0..<4).map {
+                pickEdgeTarget(bounds: state.world.screenBounds, blobSize: state.body.size, edgeIndex: $0, rngAlong: 0.5)
+            }
+            let edgeIndex = biasedIndex(anchor: anchor, candidates: edgeCandidates)
             let rngAlong = rng.nextUnit()
             state.body.target = pickEdgeTarget(
                 bounds: state.world.screenBounds, blobSize: state.body.size, edgeIndex: edgeIndex, rngAlong: rngAlong
             )
+            state.body.moving = true
+        case .flee:
+            // Net-new, beyond blob.js parity: `maybeYield` computes the escape target
+            // (it has the zone data this generic switch doesn't) and sets
+            // `state.body.target` before calling `startMode(.flee, ...)` — this case
+            // only marks the mode as moving, deliberately leaving the target untouched.
             state.body.moving = true
         case .idle, .happy:
             // The JS original's final `else` branch — reached only by `.idle` in
@@ -151,6 +180,40 @@ public final class StateMachine {
     func transitionToNextMode(state: inout AgentState, now: Double) {
         let next: Mode = weightedChoice(Constants.modeWeights, rngValue: rng.nextUnit())
         startMode(next, state: &state, now: now)
+    }
+
+    /// Shared by `startMode`'s wander/rest/peek polite-bias branches — see `farthestIndex`
+    /// (Math/Avoidance.swift) for the actual distance/tie-break logic.
+    private func biasedIndex(anchor: Point, candidates: [Point]) -> Int {
+        farthestIndex(anchor: anchor, candidates: candidates, rngValue: rng.nextUnit())
+    }
+
+    // MARK: - Attention avoidance (net-new, beyond blob.js parity — see
+    // Behavior/Attention.swift, Math/Avoidance.swift)
+
+    /// Reactive yield: preempts the current mode into `.flee` when the avatar overlaps
+    /// `state.body.attentionZone` (the caret's keep-out zone) or when the cursor makes
+    /// contact while the user is actively typing/scrolling. Gated on not dragging, not
+    /// happy (a drag-drop bounce takes priority), and past `yieldCooldownUntil` (the
+    /// short lockout set on flee arrival, so overlap re-checks don't thrash). Recomputes
+    /// the escape target every tick these conditions hold — including while already
+    /// `.flee` — so a caret that keeps moving re-aims the flight path.
+    func maybeYield(state: inout AgentState, now: Double) {
+        guard !state.body.dragging, state.body.mode != .happy, now >= state.memory.yieldCooldownUntil else { return }
+        let avatarRect = Rect(origin: state.body.position, size: state.body.size)
+        let zoneToEscape: Rect
+        if let zone = state.body.attentionZone, rectsOverlap(avatarRect, zone) {
+            zoneToEscape = zone
+        } else if cursorContactShouldFlee(world: state.world, position: state.body.position, size: state.body.size) {
+            zoneToEscape = Rect(origin: state.world.cursor, size: Size(width: 0, height: 0))
+        } else {
+            return
+        }
+        state.body.target = escapePoint(
+            avatarPosition: state.body.position, avatarSize: state.body.size, zone: zoneToEscape,
+            bounds: state.world.screenBounds, padding: Constants.escapePadding, minVisible: Constants.minVisible
+        )
+        startMode(.flee, state: &state, now: now)
     }
 
     func updateMovement(state: inout AgentState, dt: Double, now: Double) {
@@ -171,9 +234,17 @@ public final class StateMachine {
             if state.body.mode == .peek {
                 state.memory.pendingReturn = true
             }
+            if state.body.mode == .flee {
+                // Beyond blob.js parity: short lockout before another overlap can
+                // re-trigger .flee — see AgentMemory.yieldCooldownUntil's doc comment.
+                state.memory.yieldCooldownUntil = now + Constants.yieldCooldownMs
+            }
             return
         }
-        let step = Constants.moveSpeed * dt
+        // Beyond blob.js parity: fleeing is a deliberate scoot, faster than the calm
+        // moveSpeed roam — see Constants.fleeSpeed's doc comment.
+        let speed = state.body.mode == .flee ? Constants.fleeSpeed : Constants.moveSpeed
+        let step = speed * dt
         let t = clamp(step / d, min: 0, max: 1)
         state.body.position = Point(
             x: lerp(state.body.position.x, state.body.target.x, t),

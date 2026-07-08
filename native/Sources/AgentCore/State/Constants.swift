@@ -94,9 +94,11 @@ public enum Constants {
     ]
 
     /// The ambient emotion for each mode, before quirks/proximity/drag/happy layer on
-    /// top (see the priority ladder in Emotion.swift's doc comment).
+    /// top (see the priority ladder in Emotion.swift's doc comment). `.flee` -> `.surprised`
+    /// is net-new (beyond blob.js parity): a polite "oops, you're here" reaction to
+    /// yielding the user's attention zone.
     public static let baseEmotionByMode: [Mode: Emotion] = [
-        .idle: .neutral, .wander: .neutral, .rest: .sleepy, .peek: .curious,
+        .idle: .neutral, .wander: .neutral, .rest: .sleepy, .peek: .curious, .flee: .surprised,
     ]
 
     /// Randomized idle-only ambient quirks (blush/thinking/annoyed), layered over the
@@ -125,6 +127,24 @@ public enum Constants {
         .blush: .hatch,
         .happy: .hatch,
     ]
+
+    // MARK: Attention avoidance (net-new, beyond blob.js parity — see Behavior/Attention.swift,
+    // Math/Avoidance.swift). Kept tunable and separate from the parity constants above:
+    // over-aggressive avoidance makes the agent hug corners and feel dead, which defeats
+    // the point of a roaming pet, so these are the knobs to turn if that happens.
+
+    /// Padding (px) added around the caret rect to form `attentionZone` — a small buffer
+    /// beyond the caret's own bounds so the avatar doesn't sit flush against typed text.
+    public static let caretAvoidPadding: Double = 30
+    /// Extra clearance (px) `escapePoint` puts between the avatar and the zone edge it's
+    /// fleeing past, beyond the zone's own bounds.
+    public static let escapePadding: Double = 20
+    /// Flee speed (px/sec) — faster than `moveSpeed`'s calm roam, so yielding reads as a
+    /// deliberate "oops, excuse me" scoot rather than the same lazy drift as wandering.
+    public static let fleeSpeed: Double = 220
+    /// Lockout (ms) after a flee resolves before another overlap can re-trigger `.flee` —
+    /// prevents thrashing while the caret keeps moving near the avatar.
+    public static let yieldCooldownMs: Double = 500
 
     // MARK: Render — squash/stretch (mechanical port of blob.js's render(), lines ~200+)
 

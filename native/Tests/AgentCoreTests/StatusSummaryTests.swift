@@ -42,6 +42,11 @@ struct StatusSummaryTests {
         #expect(state.statusSummary(now: 0).row(section: "Body", label: "Mode") == "Happy")
     }
 
+    @Test func mode_flee_displaysAsFleeing() {
+        let state = Self.populatedState(mode: .flee)
+        #expect(state.statusSummary(now: 0).row(section: "Body", label: "Mode") == "Fleeing")
+    }
+
     @Test func emotion_curious_displaysAsCurious() {
         let state = Self.populatedState(emotion: .curious)
         #expect(state.statusSummary(now: 0).row(section: "Body", label: "Emotion") == "Curious")
@@ -75,6 +80,21 @@ struct StatusSummaryTests {
     @Test func size_formatsAsWidthByHeight() {
         let state = Self.populatedState(size: Size(width: 78, height: 62))
         #expect(state.statusSummary(now: 0).row(section: "Body", label: "Size") == "78\u{00D7}62")
+    }
+
+    @Test func attentionZone_nil_displaysAsEmDash() {
+        let state = Self.populatedState(attentionZone: nil)
+        #expect(state.statusSummary(now: 0).row(section: "Body", label: "Avoiding") == "\u{2014}")
+    }
+
+    @Test func attentionZone_present_formatsAsOriginAndSize() {
+        let state = Self.populatedState(
+            attentionZone: Rect(origin: Point(x: 10, y: 20), size: Size(width: 30, height: 40))
+        )
+        #expect(
+            state.statusSummary(now: 0).row(section: "Body", label: "Avoiding")
+                == "(10, 20) 30\u{00D7}40"
+        )
     }
 
     // MARK: - World section
@@ -191,6 +211,11 @@ struct StatusSummaryTests {
         #expect(state.statusSummary(now: 1_000).row(section: "Memory", label: "Proximity cooldown") == "in 8.0s")
     }
 
+    @Test func yieldCooldownUntil_formatsAsCountdown() {
+        let state = Self.populatedState(yieldCooldownUntil: 5_000)
+        #expect(state.statusSummary(now: 1_000).row(section: "Memory", label: "Yield cooldown") == "in 4.0s")
+    }
+
     // MARK: - Deterministic overall shape
 
     @Test func summary_hasBodyWorldMemorySections_inThatOrder() {
@@ -244,7 +269,9 @@ struct StatusSummaryTests {
         nextBlinkAt: Double = 0,
         quirkEmotion: Emotion? = nil,
         pendingReturn: Bool = false,
-        proximityCooldownUntil: Double = 0
+        proximityCooldownUntil: Double = 0,
+        attentionZone: Rect? = nil,
+        yieldCooldownUntil: Double = 0
     ) -> AgentState {
         AgentState(
             world: AgentWorld(
@@ -254,12 +281,13 @@ struct StatusSummaryTests {
             ),
             body: AgentBody(
                 position: position, mode: mode, target: target, moving: moving, emotion: emotion,
-                dragging: dragging, dragOffset: Vector(dx: 0, dy: 0), size: size
+                dragging: dragging, dragOffset: Vector(dx: 0, dy: 0), size: size, attentionZone: attentionZone
             ),
             memory: AgentMemory(
                 modeEndsAt: modeEndsAt, happyUntil: 0, happyResumeMode: .idle, pendingReturn: pendingReturn,
                 nextBlinkAt: nextBlinkAt, blinking: blinking, blinkEndsAt: 0, quirkEmotion: quirkEmotion,
-                quirkUntil: 0, nextQuirkAt: 0, proximityUntil: 0, proximityCooldownUntil: proximityCooldownUntil
+                quirkUntil: 0, nextQuirkAt: 0, proximityUntil: 0, proximityCooldownUntil: proximityCooldownUntil,
+                yieldCooldownUntil: yieldCooldownUntil
             )
         )
     }
