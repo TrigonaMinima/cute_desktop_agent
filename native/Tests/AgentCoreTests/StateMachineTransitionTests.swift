@@ -9,7 +9,7 @@ import Testing
 // `ManualClock` make every timer/branch deterministic.
 struct StateMachineTransitionTests {
 
-    // MARK: - startMode: idle sets modeEndsAt at mode start; wander/rest/peek don't.
+    // MARK: - startMode: idle sets modeEndsAt at mode start; wander/rest don't.
 
     @Test func startMode_idle_setsModeEndsAtAtModeStart_andDoesNotMove() {
         let sm = StateMachine(rng: SeededRandom(seed: 42), clock: ManualClock(start: 1000))
@@ -42,16 +42,6 @@ struct StateMachineTransitionTests {
         #expect(state.memory.modeEndsAt == 999)
     }
 
-    @Test func startMode_peek_setsTargetAndMoving_leavesModeEndsAtUntouched() {
-        let sm = StateMachine(rng: SeededRandom(seed: 9), clock: ManualClock(start: 1000))
-        var state = TestFixtures.makeState()
-        state.memory.modeEndsAt = 999
-        sm.startMode(.peek, state: &state, now: 1000)
-        #expect(state.body.mode == .peek)
-        #expect(state.body.moving == true)
-        #expect(state.memory.modeEndsAt == 999)
-    }
-
     // MARK: - startMode: .flee is trigger-only (never chosen by weightedChoice; target
     // always supplied by maybeYield before startMode(.flee, ...) is called).
 
@@ -67,7 +57,7 @@ struct StateMachineTransitionTests {
         #expect(state.memory.modeEndsAt == 999)
     }
 
-    // MARK: - startMode: polite bias (net-new, beyond blob.js parity — wander/rest/peek
+    // MARK: - startMode: polite bias (net-new, beyond blob.js parity — wander/rest
     // targets favor whichever edge/corner is farthest from the current activity anchor,
     // via farthestIndex, replacing a uniform randomIndex).
 
@@ -97,21 +87,12 @@ struct StateMachineTransitionTests {
         var state = TestFixtures.makeState()
         state.world.cursor = Point(x: 20, y: 20) // top-left
         sm.startMode(.rest, state: &state, now: 0)
-        let inner = innerBounds(bounds: TestFixtures.bounds, margin: Constants.restMargin, blobSize: TestFixtures.blobSize)
+        let inner = innerBounds(screen: TestFixtures.screen.frame, margin: Constants.restMargin, blobSize: TestFixtures.blobSize)
         // Farthest corner from top-left is bottom-right — deterministic, no rng involved.
         #expect(state.body.target == Point(x: inner.maxX, y: inner.maxY))
     }
 
-    @Test func startMode_peek_biasesTowardEdgeFarthestFromCursorAnchor() {
-        let sm = StateMachine(rng: SeededRandom(seed: 7), clock: ManualClock(start: 0))
-        var state = TestFixtures.makeState()
-        state.world.cursor = Point(x: 500, y: 10) // near top-center
-        sm.startMode(.peek, state: &state, now: 0)
-        // Farthest edge is the bottom — pickEdgeTarget's bottom case sits near bounds.height.
-        #expect(state.body.target.y > TestFixtures.bounds.height / 2)
-    }
-
-    // MARK: - updateMovement: arrival sets modeEndsAt for the *current* mode; peek sets pendingReturn.
+    // MARK: - updateMovement: arrival sets modeEndsAt for the *current* mode.
 
     @Test func updateMovement_onArrival_setsModeEndsAtForCurrentMode() {
         let sm = StateMachine(rng: SeededRandom(seed: 3), clock: ManualClock(start: 5000))
@@ -125,34 +106,15 @@ struct StateMachineTransitionTests {
         #expect(state.memory.modeEndsAt <= 5000 + range.max)
     }
 
-    @Test func updateMovement_onArrival_snapsToClampVisibleSafeTarget() {
+    @Test func updateMovement_onArrival_snapsFullyInsideNearestScreen() {
         let sm = StateMachine(rng: SeededRandom(seed: 3), clock: ManualClock(start: 5000))
         var state = TestFixtures.makeState(mode: .wander, position: Point(x: -998, y: 100))
-        // Target sits just off the left edge past minVisible's floor; arrival must snap
-        // to clampVisible's safe point, not the raw (unsafe) target.
+        // Target sits far off the left edge; arrival must snap fully inside the target's
+        // nearest screen — zero off-screen tolerance, not the old minVisible floor.
         state.body.target = Point(x: -1000, y: 100)
         state.body.moving = true
         sm.updateMovement(state: &state, dt: 0.016, now: 5000)
-        let safe = clampVisible(point: Point(x: -1000, y: 100), bounds: TestFixtures.bounds, blobSize: TestFixtures.blobSize, minVisible: Constants.minVisible)
-        #expect(state.body.position == safe)
-    }
-
-    @Test func updateMovement_onArrival_whilePeek_setsPendingReturnTrue() {
-        let sm = StateMachine(rng: SeededRandom(seed: 11), clock: ManualClock(start: 2000))
-        var state = TestFixtures.makeState(mode: .peek, position: Point(x: -50, y: 100))
-        state.body.target = Point(x: -49, y: 100)
-        state.body.moving = true
-        sm.updateMovement(state: &state, dt: 0.016, now: 2000)
-        #expect(state.memory.pendingReturn == true)
-    }
-
-    @Test func updateMovement_onArrival_whileNotPeek_leavesPendingReturnFalse() {
-        let sm = StateMachine(rng: SeededRandom(seed: 12), clock: ManualClock(start: 2000))
-        var state = TestFixtures.makeState(mode: .rest, position: Point(x: 100, y: 100))
-        state.body.target = Point(x: 101, y: 100)
-        state.body.moving = true
-        sm.updateMovement(state: &state, dt: 0.016, now: 2000)
-        #expect(state.memory.pendingReturn == false)
+        #expect(state.body.position == Point(x: 0, y: 100))
     }
 
     @Test func updateMovement_notYetArrived_stepsTowardTargetAtMoveSpeed() {
@@ -208,18 +170,6 @@ struct StateMachineTransitionTests {
     }
 
     // MARK: - maybeAdvanceMode
-
-    @Test func maybeAdvanceMode_peekPendingReturn_pastModeEndsAt_transitionsToWander() {
-        let sm = StateMachine(rng: SeededRandom(seed: 1), clock: ManualClock(start: 10_000))
-        var state = TestFixtures.makeState(mode: .peek)
-        state.body.moving = false
-        state.memory.pendingReturn = true
-        state.memory.modeEndsAt = 9_999
-        sm.maybeAdvanceMode(state: &state, now: 10_000)
-        #expect(state.body.mode == .wander)
-        #expect(state.memory.pendingReturn == false)
-        #expect(state.body.moving == true)
-    }
 
     @Test func maybeAdvanceMode_whileMoving_doesNothingEvenPastModeEndsAt() {
         let sm = StateMachine(rng: SeededRandom(seed: 1), clock: ManualClock(start: 100))
@@ -422,7 +372,7 @@ struct StateMachineTransitionTests {
         #expect(state.memory.proximityUntil == 0)
     }
 
-    // MARK: - drag: hard-clamped to [0, bounds - blobSize], no clampVisible negative floor.
+    // MARK: - drag: fully confined to the cursor's screen — no off-screen tolerance.
 
     @Test func beginDrag_capturesOffsetFromCursorToPosition_andStopsMovement() {
         let sm = StateMachine(rng: SeededRandom(seed: 1), clock: ManualClock(start: 0))
@@ -443,7 +393,7 @@ struct StateMachineTransitionTests {
         #expect(state.body.position == Point(x: 230, y: 250))
     }
 
-    @Test func updateDrag_cursorFarOffTopLeft_hardClampsToZero_notClampVisibleNegativeFloor() {
+    @Test func updateDrag_cursorFarOffTopLeft_hardClampsToScreenOrigin() {
         let sm = StateMachine(rng: SeededRandom(seed: 1), clock: ManualClock(start: 0))
         var state = TestFixtures.makeState(position: Point(x: 100, y: 100), cursor: Point(x: -500, y: -500))
         state.body.dragging = true
@@ -516,7 +466,7 @@ struct StateMachineTransitionTests {
         #expect(state.body.moving == true)
         let expectedTarget = escapePoint(
             avatarPosition: Point(x: 100, y: 100), avatarSize: TestFixtures.blobSize, zone: zone,
-            bounds: TestFixtures.bounds, padding: Constants.escapePadding, minVisible: Constants.minVisible
+            screen: TestFixtures.screen, padding: Constants.escapePadding
         )
         #expect(state.body.target == expectedTarget)
     }

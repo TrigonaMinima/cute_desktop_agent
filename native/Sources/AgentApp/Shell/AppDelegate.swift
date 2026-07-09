@@ -3,7 +3,9 @@ import AgentCore
 
 /// Bootstraps the overlay: loads config, builds the state machine + avatar, and drives
 /// them from a `FrameClock` — perception polling, hover hit-testing, drag, and the status
-/// item's quit action are all wired here.
+/// item's quit action are all wired here. One overlay panel per attached display, all
+/// rendering the same global-web-space state each frame (each panel just offsets by its
+/// display's origin) — see `ScreenLayout`.
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     // Shared with `stateMachine` below — `render`'s `now` and `StateMachine.tick`'s internal
     // timer comparisons (modeEndsAt, happyUntil, ...) must read the same clock instance, or
@@ -17,6 +19,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // See `LaunchAtLoginController`'s doc comment for why this must be a stored property.
     private let launchAtLogin = LaunchAtLoginController()
 
+    /// Kept past launch (unlike every other launch-time local) because a display-change
+    /// rebuild needs to make fresh `Avatar` instances — layer trees can't be shared
+    /// across views, so each new panel's view gets its own conformer from the config.
+    private var config: AppConfig!
+
     /// The avatar's live behavior/perception state — mutated once per frame by `tick`
     /// below and directly by the drag handlers (see AgentCore's `StateMachine`
     /// single-writer doc comment). Kept as its own property rather than folded into
@@ -24,17 +31,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// can pass it `inout` without reaching through an optional struct field each time.
     private var state: AgentState!
 
-    /// Everything else built once in `applicationDidFinishLaunching` and torn down
-    /// together at quit — grouped into one optional so `AppDelegate` doesn't carry a
-    /// separate implicitly-unwrapped optional per object. All of these are either
-    /// present together (after launch finishes) or absent together (before it does),
-    /// so one `Runtime?` says that directly instead of seven `T!`s each promising it
-    /// individually.
-    private struct Runtime {
-        let screenFrame: NSRect
+    /// One display's slice of the overlay: its layout snapshot entry, the panel
+    /// covering its full frame, and that panel's avatar view.
+    private struct ScreenPanel {
+        let display: ScreenLayout.Display
         let panel: OverlayPanel
         let avatarView: AvatarView
-        let frameClock: FrameClock
+    }
+
+    /// Everything built once in `applicationDidFinishLaunching` and torn down together
+    /// at quit — grouped into one optional so `AppDelegate` doesn't carry a separate
+    /// implicitly-unwrapped optional per object. `layout`/`panels`/`frameClock` are
+    /// `var`: a display change swaps them together in `rebuildScreens()`; the two menu
+    /// controllers survive rebuilds (the status item must not blink out of the menu bar
+    /// because a monitor was unplugged).
+    private struct Runtime {
+        var layout: ScreenLayout
+        var panels: [ScreenPanel]
+        var frameClock: FrameClock
         let statusItemController: StatusItemController
         let contextMenu: LiveMenuController
     }
@@ -48,26 +62,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // "idle" to the OS even while its display link is actively animating.
         ProcessInfo.processInfo.disableAutomaticTermination("AgentApp is a persistent background overlay agent")
 
-        let config: AppConfig
         do {
             config = try AppConfig.loadFromBundle()
         } catch {
             fatalError("AgentApp: failed to load config.json from bundle: \(error)")
         }
 
-        guard let screen = NSScreen.main else { fatalError("AgentApp: no screen") }
-        let screenFrame = screen.frame // full frame, not visibleFrame — matches the POC
+        guard let layout = ScreenLayout.current(fallback: nil) else { fatalError("AgentApp: no screen") }
 
-        let avatar = config.makeAvatar()
-        let bounds = Size(width: Double(screenFrame.width), height: Double(screenFrame.height))
-        state = stateMachine.makeInitialState(bounds: bounds, avatarSize: avatar.intrinsicSize, now: clock.now())
-
-        let avatarView = AvatarView(avatar: avatar)
-        avatarView.frame = NSRect(origin: .zero, size: screenFrame.size)
-        wireDrag(avatarView)
-
-        let panel = OverlayPanel(screenFrame: screenFrame, contentView: avatarView)
-        panel.orderFrontRegardless()
+        state = stateMachine.makeInitialState(
+            screens: layout.screens, avatarSize: config.makeAvatar().intrinsicSize, now: clock.now()
+        )
 
         // One provider shared by both menu surfaces (status-item dropdown + avatar
         // right-click) so their live refresh reads the identical snapshot rule by
@@ -78,41 +83,97 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let statusItemController = StatusItemController(
             title: config.statusItemTitle, summaryProvider: summaryProvider, launchAtLogin: launchAtLogin)
         let contextMenu = LiveMenuController(summaryProvider: summaryProvider, launchAtLogin: launchAtLogin)
-        wireContextMenu(avatarView, contextMenu: contextMenu)
 
         // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown
         // and scroll-wheel monitor registration are synchronous IPC with WindowServer/TCC,
         // which must not land on the first `frameClock` tick (a 60Hz display-link callback).
         _ = perception
 
-        let frameClock = FrameClock(hostView: avatarView, clock: clock) { [weak self] now, dt in
-            self?.tick(now: now, dt: dt)
-        }
-
+        let panels = buildPanels(layout: layout, contextMenu: contextMenu)
         runtime = Runtime(
-            screenFrame: screenFrame, panel: panel, avatarView: avatarView, frameClock: frameClock,
+            layout: layout, panels: panels, frameClock: makeFrameClock(panels: panels),
             statusItemController: statusItemController, contextMenu: contextMenu
         )
-        frameClock.start()
+        runtime?.frameClock.start()
+
+        // Display attach/detach/resolution changes: coalesce the notification burst one
+        // reconfiguration fires (often 2-4 back to back) into a single rebuild.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screenParametersDidChange),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil
+        )
+    }
+
+    /// One panel + avatar view per display, covering its FULL frame (not visibleFrame —
+    /// confinement to the visible area is AgentCore's clamp, and the speech bubble may
+    /// legitimately rise into the menu-bar strip).
+    private func buildPanels(layout: ScreenLayout, contextMenu: LiveMenuController) -> [ScreenPanel] {
+        layout.displays.map { display in
+            let avatarView = AvatarView(avatar: config.makeAvatar())
+            avatarView.frame = NSRect(origin: .zero, size: display.cocoaFrame.size)
+            avatarView.worldOrigin = display.fullFrameWeb.origin
+            wireDrag(avatarView)
+            wireContextMenu(avatarView, contextMenu: contextMenu)
+
+            let panel = OverlayPanel(screenFrame: display.cocoaFrame, contentView: avatarView)
+            panel.orderFrontRegardless()
+            return ScreenPanel(display: display, panel: panel, avatarView: avatarView)
+        }
+    }
+
+    /// `FrameClock` needs a host view for `NSView.displayLink` — the primary display's
+    /// avatar view. One clock drives every panel's render; per-panel display links would
+    /// tick the state machine more than once a frame.
+    private func makeFrameClock(panels: [ScreenPanel]) -> FrameClock {
+        FrameClock(hostView: panels[0].avatarView, clock: clock) { [weak self] now, dt in
+            self?.tick(now: now, dt: dt)
+        }
+    }
+
+    @objc private func screenParametersDidChange() {
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(rebuildScreens), object: nil)
+        perform(#selector(rebuildScreens), with: nil, afterDelay: 0.3)
+    }
+
+    /// Tears down every panel and rebuilds against the new display list. The state
+    /// machine needs no special handling: the next perception poll stamps the new
+    /// `screens` into `world`, and `reconcilePosition` pulls a stranded avatar onto a
+    /// surviving screen on the same tick.
+    @objc private func rebuildScreens() {
+        guard var runtime else { return }
+        guard let layout = ScreenLayout.current(fallback: runtime.layout) else { return }
+
+        runtime.frameClock.stop()
+        runtime.panels.forEach { $0.panel.close() }
+
+        runtime.layout = layout
+        runtime.panels = buildPanels(layout: layout, contextMenu: runtime.contextMenu)
+        runtime.frameClock = makeFrameClock(panels: runtime.panels)
+        self.runtime = runtime
+        runtime.frameClock.start()
     }
 
     /// The per-frame driver `FrameClock` calls: poll perception, advance the state
-    /// machine, render, refresh hit-testing, then push the live menus — in that order
-    /// (mirrors the POC's `tick()`; see AgentCore's `StateMachine.tick` doc comment for
-    /// why blink/emotion must run even mid-drag).
+    /// machine, render every panel, refresh hit-testing, then push the live menus — in
+    /// that order (mirrors the POC's `tick()`; see AgentCore's `StateMachine.tick` doc
+    /// comment for why blink/emotion must run even mid-drag).
     private func tick(now: Double, dt: Double) {
         guard let runtime else { return }
-        applyPerception(dt: dt, screenFrame: runtime.screenFrame)
+        applyPerception(dt: dt, layout: runtime.layout)
         stateMachine.tick(state: &state, dt: dt)
-        runtime.avatarView.render(state: state, now: now)
-        updateHitTest(panel: runtime.panel)
+        // Squash/bob is panel-invariant — compute once, share across every panel's render.
+        let motion = computeBodyMotion(state: state, now: now)
+        for screenPanel in runtime.panels {
+            screenPanel.avatarView.render(state: state, motion: motion)
+        }
+        updateHitTest(panels: runtime.panels)
         refreshMenus(runtime, now: now)
     }
 
     /// Polls this frame's OS-observed signals and folds them into `state.world` — the
     /// one mapping call `AgentWorld.apply(_:)` replaces the old field-by-field copy.
-    private func applyPerception(dt: Double, screenFrame: NSRect) {
-        let snapshot = perception.poll(screenFrame: screenFrame, dt: dt)
+    private func applyPerception(dt: Double, layout: ScreenLayout) {
+        let snapshot = perception.poll(layout: layout, dt: dt)
         state.world.apply(snapshot)
     }
 
@@ -136,7 +197,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        // This is a persistent background agent, not a document-window app — its one window
+        // This is a persistent background agent, not a document-window app — its windows
         // closing isn't a quit signal (mirrors the `disableAutomaticTermination` call above).
         false
     }
@@ -184,12 +245,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // same AgentCore geometry the state machine's own proximity check uses) once a frame
     // instead. Mouse events are forced on for the whole drag regardless of hover, matching
     // the plan: letting the cursor outrun the avatar mid-drag must not drop the window back
-    // into click-through and abandon the drag.
+    // into click-through and abandon the drag. Per panel, events are only wanted where the
+    // avatar's rect actually intersects that display — every other panel stays fully
+    // click-through. Mid-drag this can enable two panels at once (avatar straddling an
+    // edge), which is harmless: AppKit keeps routing the drag to the mouse-down window.
 
-    private func updateHitTest(panel: OverlayPanel) {
+    private func updateHitTest(panels: [ScreenPanel]) {
         let hovering = AgentCore.isHovering(cursor: state.world.cursor, position: state.body.position, size: state.body.size)
-        let wantsEvents = state.body.dragging || hovering
-        if wantsEvents == !panel.ignoresMouseEvents { return }
-        panel.ignoresMouseEvents = !wantsEvents
+        let avatarRect = Rect(origin: state.body.position, size: state.body.size)
+        for screenPanel in panels {
+            let onThisDisplay = rectsOverlap(avatarRect, screenPanel.display.fullFrameWeb)
+            let wantsEvents = (state.body.dragging || hovering) && onThisDisplay
+            if wantsEvents == !screenPanel.panel.ignoresMouseEvents { continue }
+            screenPanel.panel.ignoresMouseEvents = !wantsEvents
+        }
     }
 }

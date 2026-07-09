@@ -5,7 +5,7 @@ import Testing
 // (escapePoint, farthestIndex) — mirrors Math/TargetPicking.swift's style: fixed
 // bounds/blobSize below, expected numbers hand-verifiable via the comments alongside them.
 struct AvoidanceTests {
-    static let bounds = TestFixtures.bounds
+    static let screen = TestFixtures.screen
     static let blobSize = TestFixtures.blobSize
 
     // MARK: rectsOverlap
@@ -38,7 +38,7 @@ struct AvoidanceTests {
         let p = escapePoint(
             avatarPosition: Point(x: 400, y: 400), avatarSize: Self.blobSize,
             zone: Rect(origin: Point(x: 410, y: 405), size: Size(width: 50, height: 20)),
-            bounds: Self.bounds, padding: 10, minVisible: 20
+            screen: Self.screen, padding: 10
         )
         #expect(p == Point(x: 400, y: 435))
     }
@@ -50,35 +50,62 @@ struct AvoidanceTests {
         let p = escapePoint(
             avatarPosition: Point(x: 500, y: 500), avatarSize: Self.blobSize,
             zone: Rect(origin: Point(x: 490, y: 530), size: Size(width: 100, height: 80)),
-            bounds: Self.bounds, padding: 10, minVisible: 20
+            screen: Self.screen, padding: 10
         )
         #expect(p == Point(x: 500, y: 458))
     }
 
-    @Test func escapePoint_result_alwaysStaysOnScreenPerMinVisible() {
+    @Test func escapePoint_result_staysFullyInsideTheScreen() {
+        // Near the top-left corner, the left/up candidates fall off-screen and are
+        // clamped back onto the zone — only right/down clear. Full confinement means
+        // zero off-screen tolerance, not clampVisible's old minVisible floor.
         let p = escapePoint(
             avatarPosition: Point(x: 5, y: 5), avatarSize: Self.blobSize,
             zone: Rect(origin: Point(x: 0, y: 0), size: Size(width: 20, height: 20)),
-            bounds: Self.bounds, padding: 10, minVisible: 20
+            screen: Self.screen, padding: 10
         )
-        #expect(p.x >= -(Self.blobSize.width - 20))
-        #expect(p.y >= -(Self.blobSize.height - 20))
-        #expect(p.x <= Self.bounds.width - 20)
-        #expect(p.y <= Self.bounds.height - 20)
+        let f = Self.screen.frame
+        #expect(p.x >= f.origin.x)
+        #expect(p.y >= f.origin.y)
+        #expect(p.x <= f.origin.x + f.size.width - Self.blobSize.width)
+        #expect(p.y <= f.origin.y + f.size.height - Self.blobSize.height)
     }
 
-    @Test func escapePoint_zoneCoversEntireScreen_returnsOnScreenFallbackWithoutCrashing() {
+    @Test func escapePoint_zoneCoversEntireScreen_returnsFullyOnScreenFallbackWithoutCrashing() {
         // Degenerate case: no candidate can clear a full-screen zone. Must still return a
-        // point respecting the on-screen floor rather than crashing or returning garbage.
+        // fully on-screen point rather than crashing or returning garbage.
         let p = escapePoint(
             avatarPosition: Point(x: 500, y: 400), avatarSize: Self.blobSize,
-            zone: Rect(origin: Point(x: 0, y: 0), size: Self.bounds),
-            bounds: Self.bounds, padding: 10, minVisible: 20
+            zone: Self.screen.frame,
+            screen: Self.screen, padding: 10
         )
-        #expect(p.x >= -(Self.blobSize.width - 20))
-        #expect(p.y >= -(Self.blobSize.height - 20))
-        #expect(p.x <= Self.bounds.width - 20)
-        #expect(p.y <= Self.bounds.height - 20)
+        let f = Self.screen.frame
+        #expect(p.x >= f.origin.x)
+        #expect(p.y >= f.origin.y)
+        #expect(p.x <= f.origin.x + f.size.width - Self.blobSize.width)
+        #expect(p.y <= f.origin.y + f.size.height - Self.blobSize.height)
+    }
+
+    @Test func escapePoint_offsetScreen_confinesToThatScreensRect() {
+        // Avatar near the secondary display's top-left corner (origin (1200,100)); the
+        // left/up candidates fall outside the screen and must clamp to ITS origin, not
+        // the primary's — proving confinement follows the screen the avatar is on.
+        let screen = TestFixtures.secondScreen
+        let p = escapePoint(
+            avatarPosition: Point(x: 1205, y: 105), avatarSize: Self.blobSize,
+            zone: Rect(origin: Point(x: 1200, y: 100), size: Size(width: 20, height: 20)),
+            screen: screen, padding: 10
+        )
+        let f = screen.frame
+        #expect(p.x >= f.origin.x)
+        #expect(p.y >= f.origin.y)
+        #expect(p.x <= f.origin.x + f.size.width - Self.blobSize.width)
+        #expect(p.y <= f.origin.y + f.size.height - Self.blobSize.height)
+        // And it actually cleared the zone.
+        #expect(!rectsOverlap(
+            Rect(origin: p, size: Self.blobSize),
+            Rect(origin: Point(x: 1200, y: 100), size: Size(width: 20, height: 20))
+        ))
     }
 
     // MARK: farthestIndex

@@ -36,6 +36,7 @@ public final class StateMachine {
         // `maybeYield` below is what actually gates the reaction on not-dragging.
         state.body.attentionZone = attentionZone(from: state.world)
         if !state.body.dragging {
+            reconcilePosition(state: &state)
             updateHappy(state: &state, now: now)
             maybeYield(state: &state, now: now)
             updateMovement(state: &state, dt: dt, now: now)
@@ -53,10 +54,17 @@ public final class StateMachine {
     /// call to `startMode(.idle, ...)`: several of these seed values use ranges
     /// distinct from the steady-state reschedule logic (see Constants' initial* doc
     /// comments), matching the JS source exactly rather than reusing the tick-time paths.
-    public func makeInitialState(bounds: Size, avatarSize: Size, now: Double) -> AgentState {
-        let center = Point(x: bounds.width / 2, y: bounds.height / 2)
+    public func makeInitialState(screens: [ScreenInfo], avatarSize: Size, now: Double) -> AgentState {
+        // Center of the primary display's rect — NOT of the global web origin: a
+        // non-zero-origin primary (possible after display reconfiguration) must still
+        // boot the avatar onto its own frame.
+        let primary = screens[0].frame
+        let center = Point(
+            x: primary.origin.x + primary.size.width / 2,
+            y: primary.origin.y + primary.size.height / 2
+        )
         return AgentState(
-            world: AgentWorld(screenBounds: bounds, cursor: center),
+            world: AgentWorld(screens: screens, cursor: center),
             body: AgentBody(
                 position: center, mode: .idle, target: center, moving: false, emotion: .neutral,
                 dragging: false, dragOffset: Vector(dx: 0, dy: 0), size: avatarSize
@@ -65,7 +73,6 @@ public final class StateMachine {
                 modeEndsAt: now + Constants.initialModeEndsAtDelayMs,
                 happyUntil: 0,
                 happyResumeMode: .idle,
-                pendingReturn: false,
                 nextBlinkAt: now + randomRange(Constants.initialBlinkDelayMsRange),
                 blinking: false,
                 blinkEndsAt: 0,
@@ -90,18 +97,17 @@ public final class StateMachine {
         )
     }
 
-    /// Hard-clamped to `[0, bounds - blobSize]` — deliberately NOT `clampVisible`'s
-    /// off-screen-tolerant floor. While actively dragged the avatar must stay fully
-    /// on-screen; `clampVisible`'s negative floor is only for programmatic movement.
+    /// Fully confined to the cursor's screen — `nearestScreenIndex` resolves dead-zone
+    /// cursor positions (between non-aligned displays) to whichever screen is closest,
+    /// so a drag through a dead zone slides along the nearer screen's edge instead of
+    /// vanishing.
     public func updateDrag(state: inout AgentState) {
-        let bounds = state.world.screenBounds
-        let size = state.body.size
-        let rawX = state.world.cursor.x - state.body.dragOffset.dx
-        let rawY = state.world.cursor.y - state.body.dragOffset.dy
-        state.body.position = Point(
-            x: clamp(rawX, min: 0, max: bounds.width - size.width),
-            y: clamp(rawY, min: 0, max: bounds.height - size.height)
+        let raw = Point(
+            x: state.world.cursor.x - state.body.dragOffset.dx,
+            y: state.world.cursor.y - state.body.dragOffset.dy
         )
+        let screen = nearestScreen(to: state.world.cursor, screens: state.world.screens)
+        state.body.position = clampToScreen(point: raw, screen: screen, blobSize: state.body.size)
     }
 
     public func endDrag(state: inout AgentState, now: Double) {
@@ -125,14 +131,17 @@ public final class StateMachine {
     func startMode(_ mode: Mode, state: inout AgentState, now: Double) {
         state.body.mode = mode
         // Polite bias (net-new, beyond blob.js parity — see Math/Avoidance.swift): shared
-        // by wander/rest/peek below via `biasedIndex`, each picks the edge/corner farthest
+        // by wander/rest below via `biasedIndex`, each picks the edge/corner farthest
         // from the current activity anchor instead of a uniform index.
         let anchor = activityAnchor(from: state.world)
         switch mode {
         case .wander:
+            // Screen pick draws FIRST (before the bias tie-break / along / depth draws)
+            // so single-screen sequences stay byte-identical — see pickTargetScreenIndex.
+            let screen = state.world.screens[pickTargetScreenIndex(state: state)].frame
             let edgeCandidates = (0..<4).map {
                 pickBorderPoint(
-                    bounds: state.world.screenBounds, margin: Constants.roamMargin, blobSize: state.body.size,
+                    screen: screen, margin: Constants.roamMargin, blobSize: state.body.size,
                     bandDepth: Constants.borderBandDepth, edgeIndex: $0, rngAlong: 0.5, rngDepth: 0.5
                 )
             }
@@ -140,30 +149,21 @@ public final class StateMachine {
             let rngAlong = rng.nextUnit()
             let rngDepth = rng.nextUnit()
             state.body.target = pickBorderPoint(
-                bounds: state.world.screenBounds, margin: Constants.roamMargin, blobSize: state.body.size,
+                screen: screen, margin: Constants.roamMargin, blobSize: state.body.size,
                 bandDepth: Constants.borderBandDepth, edgeIndex: edgeIndex, rngAlong: rngAlong, rngDepth: rngDepth
             )
             state.body.moving = true
         case .rest:
             // Corners have no randomness of their own, so the candidates themselves are
             // the four possible final targets.
+            let screen = state.world.screens[pickTargetScreenIndex(state: state)].frame
             let cornerCandidates = (0..<4).map {
                 pickCorner(
-                    bounds: state.world.screenBounds, margin: Constants.restMargin, blobSize: state.body.size,
+                    screen: screen, margin: Constants.restMargin, blobSize: state.body.size,
                     cornerIndex: $0
                 )
             }
             state.body.target = cornerCandidates[biasedIndex(anchor: anchor, candidates: cornerCandidates)]
-            state.body.moving = true
-        case .peek:
-            let edgeCandidates = (0..<4).map {
-                pickEdgeTarget(bounds: state.world.screenBounds, blobSize: state.body.size, edgeIndex: $0, rngAlong: 0.5)
-            }
-            let edgeIndex = biasedIndex(anchor: anchor, candidates: edgeCandidates)
-            let rngAlong = rng.nextUnit()
-            state.body.target = pickEdgeTarget(
-                bounds: state.world.screenBounds, blobSize: state.body.size, edgeIndex: edgeIndex, rngAlong: rngAlong
-            )
             state.body.moving = true
         case .flee:
             // Net-new, beyond blob.js parity: `maybeYield` computes the escape target
@@ -185,10 +185,25 @@ public final class StateMachine {
         startMode(next, state: &state, now: now)
     }
 
-    /// Shared by `startMode`'s wander/rest/peek polite-bias branches — see `farthestIndex`
+    /// Shared by `startMode`'s wander/rest polite-bias branches — see `farthestIndex`
     /// (Math/Avoidance.swift) for the actual distance/tie-break logic.
     private func biasedIndex(anchor: Point, candidates: [Point]) -> Int {
         farthestIndex(anchor: anchor, candidates: candidates, rngValue: rng.nextUnit())
+    }
+
+    /// Which display a freshly-started wander/rest should target. Consumes the
+    /// `screenSwitchProbability` draw ONLY when more than one screen is attached —
+    /// single-display setups draw the exact same RNG sequence as before multi-screen
+    /// support, keeping every seeded test byte-identical. On a switch, picks uniformly
+    /// among the other screens (no draw needed when there's exactly one other).
+    private func pickTargetScreenIndex(state: AgentState) -> Int {
+        let screens = state.world.screens
+        let current = nearestScreenIndex(to: state.body.position, screens: screens)
+        guard screens.count > 1 else { return current }
+        guard rng.nextUnit() < Constants.screenSwitchProbability else { return current }
+        let others = screens.indices.filter { $0 != current }
+        if others.count == 1 { return others[0] }
+        return others[randomIndex(others.count)]
     }
 
     // MARK: - Attention avoidance (net-new, beyond blob.js parity — see
@@ -214,7 +229,8 @@ public final class StateMachine {
         }
         state.body.target = escapePoint(
             avatarPosition: state.body.position, avatarSize: state.body.size, zone: zoneToEscape,
-            bounds: state.world.screenBounds, padding: Constants.escapePadding, minVisible: Constants.minVisible
+            screen: nearestScreen(to: state.body.position, screens: state.world.screens),
+            padding: Constants.escapePadding
         )
         startMode(.flee, state: &state, now: now)
     }
@@ -226,17 +242,15 @@ public final class StateMachine {
             bx: state.body.target.x, by: state.body.target.y
         )
         if d <= Constants.arriveThreshold {
-            let safeTarget = clampVisible(
-                point: state.body.target, bounds: state.world.screenBounds, blobSize: state.body.size,
-                minVisible: Constants.minVisible
+            // Snap fully inside the target's nearest screen — belt-and-braces for a
+            // target computed against a screen list that changed mid-glide (the
+            // steady-state case is a no-op: wander/rest targets are already inset).
+            state.body.position = confine(
+                point: state.body.target, screens: state.world.screens, blobSize: state.body.size
             )
-            state.body.position = safeTarget
             state.body.moving = false
             let dwell = Constants.modeDwellMsRange[state.body.mode] ?? Constants.modeDwellMsRange[.idle]!
             state.memory.modeEndsAt = now + randomRange(dwell)
-            if state.body.mode == .peek {
-                state.memory.pendingReturn = true
-            }
             if state.body.mode == .flee {
                 // Beyond blob.js parity: short lockout before another overlap can
                 // re-trigger .flee — see AgentMemory.yieldCooldownUntil's doc comment.
@@ -249,23 +263,34 @@ public final class StateMachine {
         let speed = state.body.mode == .flee ? Constants.fleeSpeed : Constants.moveSpeed
         let step = speed * dt
         let t = clamp(step / d, min: 0, max: 1)
+        // Deliberately unclamped mid-glide: both endpoints live inside a screen, but the
+        // straight line between two displays may cross a dead zone (non-aligned
+        // monitors). Clamping each step would yank the avatar sideways along an edge;
+        // letting it briefly leave all screens reads as a clean glide instead. Arrival
+        // (above) and reconcilePosition (each tick) do the confinement.
         state.body.position = Point(
             x: lerp(state.body.position.x, state.body.target.x, t),
             y: lerp(state.body.position.y, state.body.target.y, t)
         )
-        state.body.position = clampVisible(
-            point: state.body.position, bounds: state.world.screenBounds, blobSize: state.body.size,
-            minVisible: Constants.minVisible
-        )
+    }
+
+    /// Runs first in every non-dragging tick: keeps the avatar consistent with the
+    /// current screen list (which Perception may have just changed under it — display
+    /// unplugged, resolution changed). Not moving → position must sit fully inside its
+    /// nearest screen (this is also the permanent below-the-edge fix). Moving → the
+    /// position may legally be in a dead zone mid-glide, so only the *target* is
+    /// re-clamped into a surviving screen.
+    func reconcilePosition(state: inout AgentState) {
+        let screens = state.world.screens
+        if state.body.moving {
+            state.body.target = confine(point: state.body.target, screens: screens, blobSize: state.body.size)
+        } else {
+            state.body.position = confine(point: state.body.position, screens: screens, blobSize: state.body.size)
+        }
     }
 
     func maybeAdvanceMode(state: inout AgentState, now: Double) {
         guard !state.body.moving else { return }
-        if state.body.mode == .peek && state.memory.pendingReturn && now >= state.memory.modeEndsAt {
-            state.memory.pendingReturn = false
-            startMode(.wander, state: &state, now: now)
-            return
-        }
         if now >= state.memory.modeEndsAt {
             transitionToNextMode(state: &state, now: now)
         }

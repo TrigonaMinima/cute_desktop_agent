@@ -82,6 +82,22 @@ struct StatusSummaryTests {
         #expect(state.statusSummary(now: 0).row(section: "Body", label: "Size") == "78\u{00D7}62")
     }
 
+    @Test func onScreen_singleScreen_showsIndexCountAndName() {
+        let state = Self.populatedState(position: Point(x: 100, y: 100))
+        #expect(state.statusSummary(now: 0).row(section: "Body", label: "On screen") == "1 of 1 (Main)")
+    }
+
+    @Test func onScreen_positionOnSecondScreen_showsItsIndexAndName() {
+        let state = Self.populatedState(position: Point(x: 1500, y: 400), screens: TestFixtures.twoScreens)
+        #expect(state.statusSummary(now: 0).row(section: "Body", label: "On screen") == "2 of 2 (Side)")
+    }
+
+    @Test func onScreen_deadZonePosition_resolvesToTheNearestScreen() {
+        // x=1150 is 50px from Side's left edge vs 150px from Main's right edge.
+        let state = Self.populatedState(position: Point(x: 1150, y: 400), screens: TestFixtures.twoScreens)
+        #expect(state.statusSummary(now: 0).row(section: "Body", label: "On screen") == "2 of 2 (Side)")
+    }
+
     @Test func attentionZone_nil_displaysAsEmDash() {
         let state = Self.populatedState(attentionZone: nil)
         #expect(state.statusSummary(now: 0).row(section: "Body", label: "Avoiding") == "\u{2014}")
@@ -124,9 +140,21 @@ struct StatusSummaryTests {
         #expect(state.statusSummary(now: 0).row(section: "World", label: "Frontmost app") == "Terminal")
     }
 
-    @Test func screen_formatsAsWidthByHeight() {
-        let state = Self.populatedState(screenBounds: Size(width: 1920, height: 1080))
-        #expect(state.statusSummary(now: 0).row(section: "World", label: "Screen") == "1920\u{00D7}1080")
+    @Test func screens_singleScreen_showsCountNameAndSize() {
+        let state = Self.populatedState(
+            screens: [ScreenInfo(
+                frame: Rect(origin: Point(x: 0, y: 0), size: Size(width: 1920, height: 1080)),
+                name: "Built-in"
+            )]
+        )
+        #expect(state.statusSummary(now: 0).row(section: "World", label: "Screens")
+            == "1: Built-in 1920\u{00D7}1080")
+    }
+
+    @Test func screens_twoScreens_listsEachNameAndSizeInOrder() {
+        let state = Self.populatedState(screens: TestFixtures.twoScreens)
+        #expect(state.statusSummary(now: 0).row(section: "World", label: "Screens")
+            == "2: Main 1000\u{00D7}800; Side 800\u{00D7}600")
     }
 
     @Test func typing_true_displaysAsYes() {
@@ -201,11 +229,6 @@ struct StatusSummaryTests {
         #expect(state.statusSummary(now: 0).row(section: "Memory", label: "Quirk emotion") == "Blushing")
     }
 
-    @Test func pendingReturn_true_displaysAsYes() {
-        let state = Self.populatedState(pendingReturn: true)
-        #expect(state.statusSummary(now: 0).row(section: "Memory", label: "Pending return") == "yes")
-    }
-
     @Test func proximityCooldownUntil_formatsAsCountdown() {
         let state = Self.populatedState(proximityCooldownUntil: 9_000)
         #expect(state.statusSummary(now: 1_000).row(section: "Memory", label: "Proximity cooldown") == "in 8.0s")
@@ -259,7 +282,7 @@ struct StatusSummaryTests {
         cursor: Point = Point(x: 0, y: 0),
         cursorVelocity: Vector = Vector(dx: 0, dy: 0),
         frontmostApp: AppInfo? = nil,
-        screenBounds: Size = Size(width: 1000, height: 800),
+        screens: [ScreenInfo] = TestFixtures.screens,
         typing: Bool = false,
         typingLocation: Rect? = nil,
         scrolling: Bool = false,
@@ -268,14 +291,13 @@ struct StatusSummaryTests {
         blinking: Bool = false,
         nextBlinkAt: Double = 0,
         quirkEmotion: Emotion? = nil,
-        pendingReturn: Bool = false,
         proximityCooldownUntil: Double = 0,
         attentionZone: Rect? = nil,
         yieldCooldownUntil: Double = 0
     ) -> AgentState {
         AgentState(
             world: AgentWorld(
-                screenBounds: screenBounds, cursor: cursor, cursorVelocity: cursorVelocity,
+                screens: screens, cursor: cursor, cursorVelocity: cursorVelocity,
                 frontmostApp: frontmostApp, windowBelow: nil, typing: typing, typingLocation: typingLocation,
                 scrolling: scrolling, scrollVelocity: scrollVelocity
             ),
@@ -284,7 +306,7 @@ struct StatusSummaryTests {
                 dragging: dragging, dragOffset: Vector(dx: 0, dy: 0), size: size, attentionZone: attentionZone
             ),
             memory: AgentMemory(
-                modeEndsAt: modeEndsAt, happyUntil: 0, happyResumeMode: .idle, pendingReturn: pendingReturn,
+                modeEndsAt: modeEndsAt, happyUntil: 0, happyResumeMode: .idle,
                 nextBlinkAt: nextBlinkAt, blinking: blinking, blinkEndsAt: 0, quirkEmotion: quirkEmotion,
                 quirkUntil: 0, nextQuirkAt: 0, proximityUntil: 0, proximityCooldownUntil: proximityCooldownUntil,
                 yieldCooldownUntil: yieldCooldownUntil

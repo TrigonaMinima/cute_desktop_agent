@@ -5,7 +5,11 @@ import Foundation
 /// `typing`, and `scrolling`/`scrollVelocity` are the fields here that are derived rather
 /// than polled directly — see their doc comments.
 public struct AgentWorld: Codable, Equatable {
-    public var screenBounds: Size
+    /// Every attached display's visibleFrame in global web space — index 0 is the
+    /// primary display, and the array is never empty (see `ScreenInfo`). Replaces the
+    /// old single `screenBounds: Size`: the avatar's roaming/confinement geometry is
+    /// always relative to one of these rects, never to a single global size.
+    public var screens: [ScreenInfo]
     public var cursor: Point
     /// Cursor speed in px/sec, web space — derived tick-to-tick from `cursor` by
     /// `AgentCore.cursorVelocity`, not read from the OS directly (macOS has no
@@ -43,13 +47,13 @@ public struct AgentWorld: Codable, Equatable {
     public var scrollVelocity: Vector
 
     public init(
-        screenBounds: Size, cursor: Point, cursorVelocity: Vector = Vector(dx: 0, dy: 0),
+        screens: [ScreenInfo], cursor: Point, cursorVelocity: Vector = Vector(dx: 0, dy: 0),
         frontmostApp: AppInfo? = nil, windowBelow: WindowInfo? = nil,
         frontmostWindow: WindowInfo? = nil,
         typing: Bool = false, typingLocation: Rect? = nil,
         scrolling: Bool = false, scrollVelocity: Vector = Vector(dx: 0, dy: 0)
     ) {
-        self.screenBounds = screenBounds
+        self.screens = screens
         self.cursor = cursor
         self.cursorVelocity = cursorVelocity
         self.frontmostApp = frontmostApp
@@ -114,8 +118,6 @@ public struct AgentMemory: Codable, Equatable {
     public var modeEndsAt: Double
     public var happyUntil: Double
     public var happyResumeMode: Mode
-    /// True while a `peek` is lingering at the edge, waiting to hand off to `wander`.
-    public var pendingReturn: Bool
     /// When the *next* blink starts (2500-6000ms out). The JS original fires a
     /// `setTimeout(..., 120)` to end each blink; a polled, single-writer tick has no
     /// fire-and-forget timers, so the 120ms blink-off is state too — `blinkEndsAt`.
@@ -134,7 +136,7 @@ public struct AgentMemory: Codable, Equatable {
     public var yieldCooldownUntil: Double
 
     public init(
-        modeEndsAt: Double, happyUntil: Double, happyResumeMode: Mode, pendingReturn: Bool,
+        modeEndsAt: Double, happyUntil: Double, happyResumeMode: Mode,
         nextBlinkAt: Double, blinking: Bool, blinkEndsAt: Double, quirkEmotion: Emotion?,
         quirkUntil: Double, nextQuirkAt: Double, proximityUntil: Double, proximityCooldownUntil: Double,
         yieldCooldownUntil: Double = 0
@@ -142,7 +144,6 @@ public struct AgentMemory: Codable, Equatable {
         self.modeEndsAt = modeEndsAt
         self.happyUntil = happyUntil
         self.happyResumeMode = happyResumeMode
-        self.pendingReturn = pendingReturn
         self.nextBlinkAt = nextBlinkAt
         self.blinking = blinking
         self.blinkEndsAt = blinkEndsAt

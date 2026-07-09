@@ -8,7 +8,7 @@ import Foundation
 /// triggered when the avatar overlaps the user's attention zone, never chosen by
 /// `weightedChoice` (excluded from `Constants.modeWeights`).
 public enum Mode: String, Codable, CaseIterable, Equatable {
-    case idle, wander, rest, peek, happy, flee
+    case idle, wander, rest, happy, flee
 }
 
 /// The agent's current displayed emotion. Priority ladder (highest first) lives in the

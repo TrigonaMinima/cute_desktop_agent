@@ -7,14 +7,12 @@ import Testing
 // locked "caret + cursor only" decision, scrolling and frontmostWindow deliberately do
 // NOT produce a zone — see attentionZone_scrollingOnly_isNil below.
 struct AttentionZoneTests {
-    static let bounds = TestFixtures.bounds
-
     private static func world(
         typing: Bool = false, typingLocation: Rect? = nil,
         scrolling: Bool = false, cursor: Point = Point(x: 0, y: 0)
     ) -> AgentWorld {
         AgentWorld(
-            screenBounds: bounds, cursor: cursor, frontmostApp: nil, windowBelow: nil,
+            screens: TestFixtures.screens, cursor: cursor, frontmostApp: nil, windowBelow: nil,
             typing: typing, typingLocation: typingLocation, scrolling: scrolling
         )
     }

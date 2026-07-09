@@ -101,8 +101,8 @@ final class Perception {
     /// is derived here via `AgentCore.cursorVelocity` rather than read from the OS. The
     /// first poll has no prior frame to diff against; `cursorVelocity` floors that (and any
     /// `dt <= 0`) to zero rather than dividing by zero/negative.
-    func poll(screenFrame: NSRect, dt: Double) -> PerceptionSnapshot {
-        let cursor = CoordinateSpace.webPoint(fromGlobal: NSEvent.mouseLocation, screenFrame: screenFrame)
+    func poll(layout: ScreenLayout, dt: Double) -> PerceptionSnapshot {
+        let cursor = CoordinateSpace.webPoint(fromGlobal: NSEvent.mouseLocation, primaryHeight: layout.primaryHeight)
         // No prior sample on the first poll (`lastCursor == nil`) — fall back to `cursor`
         // itself so `from == to` and the numerator is zero, letting `cursorVelocity` own all
         // zero-velocity logic in one place instead of special-casing "no baseline yet" here too.
@@ -131,7 +131,8 @@ final class Perception {
         let scrollVelocity = AgentCore.cursorVelocity(from: pendingScrollDelta, dt: dt)
         pendingScrollDelta = Vector(dx: 0, dy: 0)
         return PerceptionSnapshot(
-            cursor: cursor, cursorVelocity: velocity, frontmostApp: frontmostApp, frontmostWindow: frontmostWindow,
+            screens: layout.screens, cursor: cursor, cursorVelocity: velocity,
+            frontmostApp: frontmostApp, frontmostWindow: frontmostWindow,
             typing: typing, typingLocation: typingLocation, scrolling: scrolling, scrollVelocity: scrollVelocity
         )
     }

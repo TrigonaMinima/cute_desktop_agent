@@ -45,6 +45,7 @@ public extension AgentState {
                 .init(label: "Moving", value: StatusSummary.yesNo(body.moving)),
                 .init(label: "Dragging", value: StatusSummary.yesNo(body.dragging)),
                 .init(label: "Position", value: StatusSummary.formatPoint(body.position)),
+                .init(label: "On screen", value: StatusSummary.formatOnScreen(position: body.position, screens: world.screens)),
                 .init(label: "Target", value: StatusSummary.formatPoint(body.target)),
                 .init(label: "Size", value: StatusSummary.formatSize(body.size)),
                 .init(label: "Avoiding", value: body.attentionZone.map(StatusSummary.formatRect) ?? "\u{2014}"),
@@ -53,7 +54,7 @@ public extension AgentState {
                 .init(label: "Cursor", value: StatusSummary.formatPoint(world.cursor)),
                 .init(label: "Cursor moving", value: StatusSummary.formatCursorMoving(world)),
                 .init(label: "Frontmost app", value: world.frontmostApp?.name ?? "\u{2014}"),
-                .init(label: "Screen", value: StatusSummary.formatSize(world.screenBounds)),
+                .init(label: "Screens", value: StatusSummary.formatScreens(world.screens)),
                 .init(label: "Typing", value: StatusSummary.yesNo(world.typing)),
                 .init(label: "Typing location", value: world.typingLocation.map(StatusSummary.formatRect) ?? "\u{2014}"),
                 .init(label: "Scrolling", value: StatusSummary.formatScrolling(world)),
@@ -63,7 +64,6 @@ public extension AgentState {
                 .init(label: "Blinking", value: StatusSummary.yesNo(memory.blinking)),
                 .init(label: "Next blink", value: StatusSummary.formatCountdown(target: memory.nextBlinkAt, now: now)),
                 .init(label: "Quirk emotion", value: memory.quirkEmotion.map(StatusSummary.displayName) ?? "none"),
-                .init(label: "Pending return", value: StatusSummary.yesNo(memory.pendingReturn)),
                 .init(
                     label: "Proximity cooldown",
                     value: StatusSummary.formatCountdown(target: memory.proximityCooldownUntil, now: now)
@@ -87,7 +87,6 @@ private extension StatusSummary {
         case .idle: return "Idle"
         case .wander: return "Wandering"
         case .rest: return "Resting"
-        case .peek: return "Peeking"
         case .happy: return "Happy"
         case .flee: return "Fleeing"
         }
@@ -131,6 +130,22 @@ private extension StatusSummary {
 
     static func formatRect(_ rect: Rect) -> String {
         "\(formatPoint(rect.origin)) \(formatSize(rect.size))"
+    }
+
+    /// "1 of 2 (Main)" — which display the avatar is on right now, via the same
+    /// `nearestScreenIndex` the state machine confines with, so a dead-zone position
+    /// (mid-glide between non-aligned displays) reads as its closest screen instead of
+    /// "nowhere". 1-based, matching how people count monitors.
+    static func formatOnScreen(position: Point, screens: [ScreenInfo]) -> String {
+        let index = nearestScreenIndex(to: position, screens: screens)
+        return "\(index + 1) of \(screens.count) (\(screens[index].name))"
+    }
+
+    /// "2: Main 1000×800; Side 800×600" — count, then each display's name and size in
+    /// list order (index 0 is always the primary).
+    static func formatScreens(_ screens: [ScreenInfo]) -> String {
+        let entries = screens.map { "\($0.name) \(formatSize($0.frame.size))" }
+        return "\(screens.count): \(entries.joined(separator: "; "))"
     }
 
     /// `target`/`now` are both ms (see `Clock.swift`); rendered as seconds to one

@@ -57,7 +57,7 @@ struct CursorMotionTests {
 
     @Test func cursorMoving_velocityBelowThreshold_isFalse() {
         let world = AgentWorld(
-            screenBounds: Size(width: 1000, height: 800), cursor: Point(x: 0, y: 0),
+            screens: TestFixtures.screens, cursor: Point(x: 0, y: 0),
             cursorVelocity: Vector(dx: 1, dy: 0)
         )
         #expect(world.cursorMoving == false)
@@ -65,14 +65,14 @@ struct CursorMotionTests {
 
     @Test func cursorMoving_velocityAboveThreshold_isTrue() {
         let world = AgentWorld(
-            screenBounds: Size(width: 1000, height: 800), cursor: Point(x: 0, y: 0),
+            screens: TestFixtures.screens, cursor: Point(x: 0, y: 0),
             cursorVelocity: Vector(dx: 100, dy: 0)
         )
         #expect(world.cursorMoving == true)
     }
 
     @Test func cursorMoving_zeroVelocity_isFalse() {
-        let world = AgentWorld(screenBounds: Size(width: 1000, height: 800), cursor: Point(x: 0, y: 0))
+        let world = AgentWorld(screens: TestFixtures.screens, cursor: Point(x: 0, y: 0))
         #expect(world.cursorMoving == false)
     }
 }

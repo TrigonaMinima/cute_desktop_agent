@@ -9,6 +9,11 @@ import AgentCore
 /// observed, not part of the behavior core's own state model. `AgentWorld` (AgentCore)
 /// stays the single source of truth; this is just how a poll's results travel there.
 struct PerceptionSnapshot {
+    /// The current display list (from the `ScreenLayout` snapshot `AppDelegate` caches
+    /// and hands to each poll) — stamped every frame like any other perceived signal, so
+    /// a display change flows into `world.screens` through the same single-writer path
+    /// as the cursor, and `StateMachine.reconcilePosition` sees it next tick.
+    var screens: [ScreenInfo]
     var cursor: Point
     var cursorVelocity: Vector
     var frontmostApp: AppInfo?
@@ -22,9 +27,8 @@ struct PerceptionSnapshot {
 extension AgentWorld {
     /// Applies one poll's signals to `self` — the single mapping site `AppDelegate`'s
     /// per-frame tick calls instead of copying `PerceptionSnapshot`'s fields one by one.
-    /// Deliberately does not touch `screenBounds`: that's set once at launch from the
-    /// screen frame, not re-derived from a perception poll.
     mutating func apply(_ snapshot: PerceptionSnapshot) {
+        screens = snapshot.screens
         cursor = snapshot.cursor
         cursorVelocity = snapshot.cursorVelocity
         frontmostApp = snapshot.frontmostApp

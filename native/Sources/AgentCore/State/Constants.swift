@@ -19,12 +19,16 @@ public enum Constants {
     public static let restMargin: Double = 24
     /// How deep (px) the "stay near the edge" wander/rest band is.
     public static let borderBandDepth: Double = 160
-    /// px of the avatar guaranteed on-screen at all times (clampVisible's floor).
-    public static let minVisible: Double = 20
     /// Roaming speed in px/sec — slow, calm movement.
     public static let moveSpeed: Double = 80
     /// Distance (px) at which a moving agent is considered "arrived" at its target.
     public static let arriveThreshold: Double = 4
+
+    /// Chance that a freshly-started wander/rest targets a DIFFERENT display than the
+    /// one the avatar is on. This extra RNG draw happens only when more than one screen
+    /// is attached — single-display setups draw the exact same sequence as before this
+    /// constant existed, keeping seeded behavior (and tests) byte-identical.
+    public static let screenSwitchProbability: Double = 0.15
 
     /// Fixed duration (ms) of the happy bounce triggered by a drag-drop.
     public static let happyDurationMs: Double = 500
@@ -83,7 +87,7 @@ public enum Constants {
     /// Favor sitting still (idle/rest) over roaming; ordered array (not a Dictionary)
     /// so `weightedChoice`'s tie-breaking stays deterministic — see Geometry.swift.
     public static let modeWeights: [(Mode, Double)] = [
-        (.idle, 0.5), (.wander, 0.2), (.rest, 0.25), (.peek, 0.05),
+        (.idle, 0.5), (.wander, 0.2), (.rest, 0.25),
     ]
 
     /// (min, max) dwell time in ms once a mode's target is reached (or immediately,
@@ -93,7 +97,6 @@ public enum Constants {
         .idle: (3000, 6000),
         .wander: (2500, 5000),
         .rest: (6000, 12000),
-        .peek: (800, 1600),
     ]
 
     /// The ambient emotion for each mode, before quirks/proximity/drag/happy layer on
@@ -101,7 +104,7 @@ public enum Constants {
     /// is net-new (beyond blob.js parity): a polite "oops, you're here" reaction to
     /// yielding the user's attention zone.
     public static let baseEmotionByMode: [Mode: Emotion] = [
-        .idle: .neutral, .wander: .neutral, .rest: .sleepy, .peek: .curious, .flee: .surprised,
+        .idle: .neutral, .wander: .neutral, .rest: .sleepy, .flee: .surprised,
     ]
 
     /// Randomized idle-only ambient quirks (blush/thinking/annoyed), layered over the

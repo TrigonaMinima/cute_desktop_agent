@@ -15,16 +15,16 @@ public func rectsOverlap(_ a: Rect, _ b: Rect) -> Bool {
         a.origin.y + a.size.height > b.origin.y
 }
 
-/// The nearest on-screen point (avatar's top-left corner) that clears `zone` by `padding`
-/// px, starting from `avatarPosition`. Tries the four "just past the zone" positions
-/// (left/right/up/down), keeps whichever still clears the zone after `clampVisible`'s
-/// on-screen floor is applied, and returns the smallest move. If none of the four
-/// candidates clears the zone after clamping (e.g. a zone spanning the whole screen),
-/// falls back to whichever clamped candidate ends up farthest from the zone's center —
-/// maximum clearance rather than an arbitrary pick.
+/// The nearest point on `screen` (avatar's top-left corner) that clears `zone` by
+/// `padding` px, starting from `avatarPosition`. Tries the four "just past the zone"
+/// positions (left/right/up/down), keeps whichever still clears the zone after
+/// `clampToScreen`'s full confinement is applied, and returns the smallest move. If none
+/// of the four candidates clears the zone after clamping (e.g. a zone spanning the whole
+/// screen), falls back to whichever clamped candidate ends up farthest from the zone's
+/// center — maximum clearance rather than an arbitrary pick.
 public func escapePoint(
-    avatarPosition: Point, avatarSize: Size, zone: Rect, bounds: Size,
-    padding: Double, minVisible: Double
+    avatarPosition: Point, avatarSize: Size, zone: Rect, screen: ScreenInfo,
+    padding: Double
 ) -> Point {
     let rawCandidates = [
         Point(x: zone.origin.x - padding - avatarSize.width, y: avatarPosition.y), // left
@@ -33,7 +33,7 @@ public func escapePoint(
         Point(x: avatarPosition.x, y: zone.origin.y + zone.size.height + padding), // down
     ]
     let clamped = rawCandidates.map {
-        clampVisible(point: $0, bounds: bounds, blobSize: avatarSize, minVisible: minVisible)
+        clampToScreen(point: $0, screen: screen, blobSize: avatarSize)
     }
     let clearing = clamped.filter { !rectsOverlap(Rect(origin: $0, size: avatarSize), zone) }
 
@@ -54,7 +54,7 @@ public func escapePoint(
 }
 
 /// Picks the index into `candidates` whose point is farthest from `anchor` — the "polite"
-/// bias for wander/rest/peek target-picking, replacing a uniform `randomIndex` so the
+/// bias for wander/rest target-picking, replacing a uniform `randomIndex` so the
 /// agent tends to settle away from the user's current activity. Ties are broken by
 /// `rngValue` (uniform in [0, 1]) so behavior stays deterministic under test.
 public func farthestIndex(anchor: Point, candidates: [Point], rngValue: Double) -> Int {

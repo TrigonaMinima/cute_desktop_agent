@@ -11,7 +11,16 @@ struct AgentStateCodableTests {
     static func populatedState() -> AgentState {
         AgentState(
             world: AgentWorld(
-                screenBounds: Size(width: 1920, height: 1080),
+                screens: [
+                    ScreenInfo(
+                        frame: Rect(origin: Point(x: 0, y: 0), size: Size(width: 1920, height: 1080)),
+                        name: "Built-in"
+                    ),
+                    ScreenInfo(
+                        frame: Rect(origin: Point(x: 1920, y: -200), size: Size(width: 2560, height: 1415)),
+                        name: "External"
+                    ),
+                ],
                 cursor: Point(x: 400, y: 300),
                 cursorVelocity: Vector(dx: 120, dy: -45),
                 frontmostApp: AppInfo(bundleIdentifier: "com.apple.Terminal", name: "Terminal"),
@@ -39,7 +48,6 @@ struct AgentStateCodableTests {
                 modeEndsAt: 12_345,
                 happyUntil: 0,
                 happyResumeMode: .idle,
-                pendingReturn: false,
                 nextBlinkAt: 15_000,
                 blinking: false,
                 blinkEndsAt: 0,

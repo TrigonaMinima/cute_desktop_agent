@@ -16,17 +16,25 @@ public final class AvatarView: NSView {
     private var appliedEmotion: Emotion?
     private var currentFace: EmotionFaceSpec?
 
+    /// This panel's display's full-frame origin in GLOBAL web space. `AgentState` works
+    /// in global web coordinates spanning all displays; each panel only covers its own
+    /// display — so `render` subtracts this to place layers view-locally, and the mouse
+    /// closures below add it back so `AppDelegate` (and through it the state machine)
+    /// only ever sees global web points. Zero for the primary display's panel.
+    public var worldOrigin: Point = Point(x: 0, y: 0)
+
     /// Forwarded raw `NSResponder` mouse events — this view has no state of its own to
     /// mutate; `AppDelegate` owns translating these into `StateMachine.beginDrag`/
     /// `updateDrag`/`endDrag` calls, preserving single-writer discipline on `AgentState`.
-    /// The point passed is already in this view's (flipped, top-left-origin) coordinate
-    /// space, i.e. the same "web space" `AgentBody.position` uses — no conversion needed.
+    /// The point passed is already converted from this view's (flipped, top-left-origin)
+    /// local space into global web space via `worldOrigin` — no conversion needed by the
+    /// receiver.
     public var onMouseDown: ((CGPoint) -> Void)?
     public var onMouseDragged: ((CGPoint) -> Void)?
     public var onMouseUp: (() -> Void)?
 
-    /// Builds the right-click context menu for a click at `point` (same flipped,
-    /// top-left-origin "web space" as the closures above). `AppDelegate` guards this
+    /// Builds the right-click context menu for a click at `point` (same global web
+    /// space as the closures above). `AppDelegate` guards this
     /// with the same `AgentCore.isHovering` box check `updateHitTest` uses and returns
     /// `nil` for a click that lands off the avatar during the one-frame window before
     /// hit-testing catches up.
@@ -47,15 +55,21 @@ public final class AvatarView: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     public override func mouseDown(with event: NSEvent) {
-        onMouseDown?(convert(event.locationInWindow, from: nil))
+        onMouseDown?(webPoint(from: event))
     }
 
     public override func mouseDragged(with event: NSEvent) {
-        onMouseDragged?(convert(event.locationInWindow, from: nil))
+        onMouseDragged?(webPoint(from: event))
     }
 
     public override func mouseUp(with event: NSEvent) {
         onMouseUp?()
+    }
+
+    /// View-local (flipped) event location + this panel's `worldOrigin` = global web point.
+    private func webPoint(from event: NSEvent) -> CGPoint {
+        let local = convert(event.locationInWindow, from: nil)
+        return CGPoint(x: local.x + CGFloat(worldOrigin.x), y: local.y + CGFloat(worldOrigin.y))
     }
 
     /// Right-click path. AppKit owns popup positioning and runs its own tracking loop
@@ -63,7 +77,7 @@ public final class AvatarView: NSView {
     /// this needs no coordination with the `CADisplayLink`-driven frame clock or the
     /// panel's per-frame `ignoresMouseEvents` toggling.
     public override func menu(for event: NSEvent) -> NSMenu? {
-        onBuildContextMenu?(convert(event.locationInWindow, from: nil))
+        onBuildContextMenu?(webPoint(from: event))
     }
 
     /// Applies one frame of `state` to the layer tree. Every per-frame layer write is
@@ -71,13 +85,24 @@ public final class AvatarView: NSView {
     /// implicit animation smears the display-link-driven squash/position into a visible
     /// lag. Explicit animations (the bubble-pop keyframe animation below) are unaffected
     /// by `setDisableActions` and still play.
-    public func render(state: AgentState, now: Double) {
+    ///
+    /// `motion` is passed in rather than derived here: `computeBodyMotion` is
+    /// panel-invariant (a pure function of `(state, now)`), and this method runs once
+    /// per attached display each frame — `AppDelegate.tick` computes it once and shares
+    /// it across every panel's render.
+    public func render(state: AgentState, motion: BodyMotion) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
 
-        let motion = computeBodyMotion(state: state, now: now)
         let size = avatar.intrinsicSize
-        let origin = CGPoint(x: CGFloat(state.body.position.x), y: CGFloat(state.body.position.y))
+        // Global web position → this panel's local space. A position on another display
+        // simply lands outside this view's bounds and the window server clips it — which
+        // is exactly how a mid-glide avatar straddling two adjacent displays renders
+        // seamlessly across both panels.
+        let origin = CGPoint(
+            x: CGFloat(state.body.position.x - worldOrigin.x),
+            y: CGFloat(state.body.position.y - worldOrigin.y)
+        )
         layers.body.position = CGPoint(
             x: origin.x + CGFloat(size.width) / 2,
             y: origin.y + CGFloat(size.height) / 2 + CGFloat(motion.bobY)
