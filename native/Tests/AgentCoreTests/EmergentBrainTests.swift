@@ -236,6 +236,41 @@ struct EmergentBrainTests {
         #expect(state.mind!.habituation.level(for: "cursorDart") < before)
     }
 
+    // MARK: Power ladder (decision log D11: doze throttles, sleep hands off to the shell)
+
+    @Test func tick_quietFor90Seconds_dozesAndThrottlesCognition() {
+        let clock = ManualClock()
+        var (brain, state) = makeBooted(clock: clock)
+        step(brain, &state, clock: clock, frames: 5460) // 91s of no input
+        #expect(state.mind?.power == .dozing)
+        let lastCognitionAt = state.mind!.lastCognitionAt
+        step(brain, &state, clock: clock, frames: 20) // ~333ms — under the doze slice
+        #expect(state.mind!.lastCognitionAt == lastCognitionAt)
+        step(brain, &state, clock: clock, frames: 15) // ~583ms — doze slice due
+        #expect(state.mind!.lastCognitionAt > lastCognitionAt)
+    }
+
+    @Test func tick_activityWhileDozing_wakesOnTheNextCognitionSlice() {
+        let clock = ManualClock()
+        var (brain, state) = makeBooted(clock: clock)
+        step(brain, &state, clock: clock, frames: 5460)
+        #expect(state.mind?.power == .dozing)
+        state.world.cursor = Point(x: 300, y: 300)
+        state.world.cursorVelocity = Vector(dx: 50, dy: 0) // gentle move, no reflex
+        step(brain, &state, clock: clock, frames: 35) // one doze slice at most
+        #expect(state.mind?.power == .awake)
+    }
+
+    @Test func tick_quietForFiveMinutes_fallsAsleepSettledIntoRest() {
+        let clock = ManualClock()
+        var (brain, state) = makeBooted(clock: clock)
+        step(brain, &state, clock: clock, frames: 18660) // 311s of no input
+        #expect(state.mind?.power == .sleeping)
+        #expect(state.mind?.behavior == .rest)
+        // Doze's baseline bias has been dragging energy down since the 90s mark.
+        #expect(state.mind!.drives.energy < 0.5)
+    }
+
     // MARK: Blink keeps running on the emergent path
 
     @Test func tick_blinkFiresAndReschedules() {

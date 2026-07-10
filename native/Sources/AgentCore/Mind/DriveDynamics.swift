@@ -49,11 +49,17 @@ public enum DriveDynamics {
     /// One cognition tick: exponential leak toward the effective baseline per drive
     /// (exact `exp` form, so any dt is stable, not just small ones), then the two
     /// one-directional coupling growth terms, then the clamp.
+    ///
+    /// `baselineScale` biases the energy/arousal baselines down without touching the
+    /// dynamics — the doze tier's half of decision log D11. 1 (awake) leaves them alone.
     public static func tick(
-        _ drives: inout Drives, temperament: Temperament, hourOfDay: Double, dt: Double
+        _ drives: inout Drives, temperament: Temperament, hourOfDay: Double, dt: Double,
+        baselineScale: Double = 1
     ) {
         guard dt > 0 else { return }
-        let base = effectiveBaselines(temperament: temperament, hourOfDay: hourOfDay)
+        var base = effectiveBaselines(temperament: temperament, hourOfDay: hourOfDay)
+        base.energy *= baselineScale
+        base.arousal *= baselineScale
 
         for path in Drives.allDrivePaths {
             let tau = MindConstants.driveRelaxationTauSeconds[keyPath: path]

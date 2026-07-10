@@ -47,6 +47,19 @@ struct DrivesTests {
         #expect(abs(drives.arousal - baseline) < 0.05)
     }
 
+    @Test func tick_dozeBaselineScale_pullsEnergyAndArousalBelowTheAwakeBaselines() {
+        // The doze tier's "drive baselines biased down" (decision log D11): energy and
+        // arousal relax toward scaled-down targets; the other four drives are untouched.
+        var drives = Drives.atBaselines(of: .calm, hourOfDay: 15)
+        let awake = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 15)
+        for _ in 0..<2400 {
+            DriveDynamics.tick(&drives, temperament: .calm, hourOfDay: 15, dt: 1, baselineScale: 0.6)
+        }
+        #expect(abs(drives.energy - awake.energy * 0.6) < 0.02)
+        #expect(abs(drives.arousal - awake.arousal * 0.6) < 0.02)
+        #expect(abs(drives.comfort - awake.comfort) < 0.02)
+    }
+
     @Test func tick_zeroDt_changesNothing() {
         var drives = Drives.atBaselines(of: .calm, hourOfDay: 12)
         drives.arousal = 0.9

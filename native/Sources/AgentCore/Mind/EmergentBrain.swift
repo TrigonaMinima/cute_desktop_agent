@@ -97,8 +97,12 @@ public final class EmergentBrain {
             mind.rearbitrateAt = event.endsAt
         }
 
-        // 2. Cognition at 8 Hz.
-        if now - mind.lastCognitionAt >= MindConstants.cognitionIntervalSeconds * 1000 {
+        // 2. Cognition at 8 Hz awake, throttled to the doze slice below the awake tier
+        // (D11) — the reflex arc above and the motor/gaze systems below stay per-frame.
+        let cognitionInterval = mind.power == .awake
+            ? MindConstants.cognitionIntervalSeconds
+            : MindConstants.dozeCognitionIntervalSeconds
+        if now - mind.lastCognitionAt >= cognitionInterval * 1000 {
             runCognition(state: state, mind: &mind, now: now)
         }
 
@@ -128,9 +132,26 @@ public final class EmergentBrain {
                 DriveDynamics.apply(.userReturned, to: &mind.drives, temperament: mind.temperament)
             }
         }
-        DriveDynamics.tick(
-            &mind.drives, temperament: mind.temperament, hourOfDay: hourOfDay(), dt: cognitionDt
+        // The power tier follows the same activity clock the situation model keeps —
+        // recomputed every slice, so fresh input reads as awake within one slice with
+        // no event plumbing.
+        mind.power = PowerPolicy.tier(
+            secondsSinceActivity: mind.situation.secondsSinceActivity(now: now)
         )
+        DriveDynamics.tick(
+            &mind.drives, temperament: mind.temperament, hourOfDay: hourOfDay(),
+            dt: cognitionDt,
+            baselineScale: mind.power == .awake ? 1 : MindConstants.dozeDriveBaselineScale
+        )
+
+        // Asleep: settle into rest and stop arbitrating. The shell reads `.sleeping`
+        // as its cue to stop the frame clock, so this is the posture it freezes in.
+        if mind.power == .sleeping {
+            if mind.behavior != .rest {
+                commit(.rest, state: state, mind: &mind, now: now)
+            }
+            return
+        }
 
         // While a startle/flinch holds the body, arbitration waits — the reflex is not
         // a behavior and never competes with them.

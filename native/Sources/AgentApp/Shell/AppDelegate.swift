@@ -58,6 +58,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var runtime: Runtime?
 
+    /// True while the sleep tier has the frame clock stopped (see `enterSleepIfNeeded`).
+    private var dormant = false
+    private lazy var powerController = PowerController { [weak self] in
+        self?.wakeFromSleep()
+    }
+
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
@@ -155,7 +161,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         runtime.panels = buildPanels(layout: layout, contextMenu: runtime.contextMenu)
         runtime.frameClock = makeFrameClock(panels: runtime.panels)
         self.runtime = runtime
-        runtime.frameClock.start()
+        // A display change while asleep doesn't restart the clock — the panels are
+        // rebuilt (so the sleeping avatar reappears on the new layout when it wakes),
+        // but wake stays event-driven via `PowerController`.
+        if !dormant {
+            runtime.frameClock.start()
+        }
     }
 
     /// Builds the config-selected brain. Both share the delegate's clock (see the
@@ -188,6 +199,28 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         updateHitTest(panels: runtime.panels)
         refreshMenus(runtime, now: now)
+        enterSleepIfNeeded()
+    }
+
+    /// The sleep tier's shell half (decision log D11): once the brain settles at
+    /// `.sleeping` — always in the rest pose, committed on the same cognition slice —
+    /// stop the frame clock entirely and hand wake duty to `PowerController`. Runs
+    /// last in `tick` so the frame that falls asleep still renders its final pose.
+    private func enterSleepIfNeeded() {
+        guard !dormant, state.mind?.power == .sleeping, let runtime else { return }
+        dormant = true
+        runtime.frameClock.stop()
+        powerController.beginSleep()
+    }
+
+    /// Restarts the clock on any wake signal. If the signal was stale (no real input
+    /// reached perception), the next cognition slice re-reads `.sleeping` and
+    /// `enterSleepIfNeeded` puts the shell straight back to sleep — cheap and safe.
+    private func wakeFromSleep() {
+        guard dormant else { return }
+        dormant = false
+        powerController.endSleep()
+        runtime?.frameClock.start()
     }
 
     /// Polls this frame's OS-observed signals and folds them into `state.world` — the

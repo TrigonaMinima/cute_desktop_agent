@@ -169,6 +169,18 @@ public enum MindConstants {
     /// clearing the target and forcing a re-arbitration.
     public static let arriveRadiusPx: Double = 12
 
+    // MARK: Power ladder (decision log D11)
+
+    /// Seconds of no user input before the brain drops to the doze tier.
+    public static let powerDozeAfterSeconds: Double = 90
+    /// Seconds of no user input before the sleep tier (shell stops the frame clock).
+    public static let powerSleepAfterSeconds: Double = 300
+    /// Cognition slice while dozing — a quarter of the awake rate.
+    public static let dozeCognitionIntervalSeconds: Double = 0.5
+    /// Multiplier on the energy/arousal baselines while dozing or asleep — the "drive
+    /// baselines biased down" half of the doze tier.
+    public static let dozeDriveBaselineScale: Double = 0.6
+
     // MARK: Reflex arc (design doc layer 2)
 
     /// Cursor must be within this many px of body center for a dart to register.

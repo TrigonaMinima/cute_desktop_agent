@@ -320,6 +320,40 @@ Rendering choices that came with the wiring:
 
 ---
 
+## D18. Power ladder mechanics: doze in the brain, sleep in the shell
+
+**Decision**: the D11 tiers are implemented in two halves, split exactly along
+the AgentCore/AppKit boundary.
+
+- **Tier selection is pure and recomputed, not event-driven**: `PowerPolicy`
+  maps `SituationModel.secondsSinceActivity(now:)` to a tier (`awake` < 90 s ≤
+  `dozing` < 300 s ≤ `sleeping`), re-evaluated on every cognition slice. Waking
+  therefore needs no plumbing inside AgentCore — any fresh input resets the
+  situation model's activity clock, and the next slice reads `awake`.
+- **Doze is brain-internal**: the cognition slice stretches from 125 ms to
+  500 ms, and the energy/arousal drive baselines are scaled by 0.6 (a
+  `baselineScale` parameter on `DriveDynamics.tick` — targets shift, dynamics
+  untouched, so the other four drives and all stability properties are
+  unaffected). Reflexes, physics, gaze, and rendering keep running per-frame:
+  a dozing Jiggy still flinches.
+- **Sleep is a shell decision keyed off brain state**: on the slice that reads
+  `.sleeping`, the brain commits `.rest` (the pose it freezes in) and skips
+  arbitration; `AppDelegate` sees `mind.power == .sleeping` at the end of the
+  frame and stops the `FrameClock` outright — no display link, no perception
+  polling, no rendering, ~0% CPU.
+- **Wake is event-driven via `PowerController`**: a global `NSEvent` monitor
+  (mouse move, left click, key down, scroll) plus workspace notifications
+  (machine wake, screens wake, session became active) plus the distributed
+  `com.apple.screenIsUnlocked`. Any of them restarts the clock. A **stale wake
+  is deliberately harmless**: if no real input reached perception, the next
+  cognition slice still reads `.sleeping` and the shell re-sleeps — chosen over
+  filtering wake signals for freshness, which would duplicate the situation
+  model's job in the shell.
+- A display change while dormant rebuilds the panels but does **not** restart
+  the clock; wake stays event-driven.
+
+---
+
 ## Deferred follow-ups discovered during the build
 
 - Authored yawn/stretch/wary-watch set-piece faces (need user-confirmed
