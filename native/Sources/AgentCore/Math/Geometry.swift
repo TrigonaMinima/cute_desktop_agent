@@ -17,6 +17,10 @@ public func distance(ax: Double, ay: Double, bx: Double, by: Double) -> Double {
     Foundation.hypot(bx - ax, by - ay)
 }
 
+public func distance(_ a: Point, _ b: Point) -> Double {
+    distance(ax: a.x, ay: a.y, bx: b.x, by: b.y)
+}
+
 /// Picks a key from `weights` proportionally to its weight, given `rngValue` in [0, 1].
 ///
 /// `weights` is an ordered array of (key, weight) pairs rather than a Dictionary — this

@@ -88,4 +88,46 @@ public enum MindConstants {
     /// Repulsion (px/s²) at full edge penetration; falls off quadratically across the
     /// margin so the boundary feels like a soft cushion, not a wall.
     public static let edgeAvoidStrength: Double = 600
+
+    // MARK: Habituation (shared by gaze salience and the reflex arc)
+
+    /// Seconds of continuous exposure (at temperament rate 1) for interest fatigue to
+    /// reach ~63%. Calm's 1.6 rate shortens this to ~5s — it glances, then moves on.
+    public static let habituationGrowTauSeconds: Double = 8
+    /// Seconds for a habituated stimulus to recover ~63% of its freshness once unattended.
+    public static let habituationRecoveryTauSeconds: Double = 20
+
+    // MARK: Gaze salience contest (design doc "Gaze: how attention gets allocated")
+
+    /// How much a challenger must clear the incumbent's salience by to steal the eyes —
+    /// gaze's own hysteresis, so attention never flips on a hair.
+    public static let gazeSwitchMargin: Double = 0.15
+    /// Minimum ms a newly acquired target is held before another switch is allowed.
+    public static let gazeMinDwellMs: Double = 350
+    /// Ms after a switch during which the eyes move at saccade speed, then pursuit.
+    public static let saccadeDurationMs: Double = 120
+    /// Gaze-approach time constant (s) during a saccade — effectively a snap.
+    public static let saccadeTauSeconds: Double = 0.04
+    /// Pursuit time constant (s) at full attention: glued to the target.
+    public static let pursuitTightTauSeconds: Double = 0.08
+    /// Pursuit time constant (s) at zero attention: loose, dreamy tracking.
+    public static let pursuitLooseTauSeconds: Double = 0.35
+    /// Time constant (s) for the attention level chasing the winner's salience.
+    public static let attentionTauSeconds: Double = 0.6
+    /// Seconds for an onset's pull to fade — a window opening is old news in a few beats.
+    public static let onsetSalienceDecaySeconds: Double = 4.0
+    /// How strongly full habituation suppresses a candidate (1 = to zero).
+    public static let gazeHabituationStrength: Double = 0.7
+    /// Cursor speed (px/s) at which its motion contribution saturates.
+    public static let cursorSalienceSpeedScale: Double = 2000
+    /// Distance (px) within which cursor proximity to the body adds salience.
+    public static let cursorSalienceProximityRadius: Double = 400
+    /// Arousal near zero scales all non-neutral salience to this floor — sleepiness
+    /// flattens everything, and the eyes drift home to neutral. Kept low enough that
+    /// even a fast nearby cursor (salience ≈ 1) can't clear the neutral-plus-margin bar.
+    public static let gazeLowArousalGainFloor: Double = 0.25
+    /// The neutral resting gaze sits this many px below body center (ahead, slightly down).
+    public static let neutralGazeDropPx: Double = 60
+    /// Gaze offset (px) at which `direction(from:)` reports full pupil deflection.
+    public static let gazeDirectionFullDeflectionPx: Double = 150
 }

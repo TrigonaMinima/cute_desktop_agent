@@ -145,6 +145,44 @@ constants. The classic `computeBodyMotion` remains for the classic path; the
 emergent path derives an equivalent `BodyMotion` from physics state so the
 `Avatar`/`AvatarView` render seam is unchanged.
 
+## D13. Gaze spine specifics
+
+The doc's candidate list maps onto v0 cheap signals as: cursor (position +
+derived velocity), onset (frontmost app/window identity change; the first
+frame is baseline, so launching next to an open window is not an event), user
+proxy (caret → focused-window center → screen front-and-center, in that
+order, so "look back at you" always exists), motion (active scrolling in the
+frontmost window — the only cheap on-screen-motion signal we have), own
+locomotion target, and neutral rest (body center, 60 px down).
+
+Salience: non-neutral candidates scale by arousal (floor 0.25 — a sleepy
+Jiggy's eyes flatten home to neutral, and even a salience-1.0 candidate can't
+clear the neutral-plus-margin bar) and by per-kind habituation (one shared
+`Habituation` store, keyed by kind; the reflex arc will key the same store by
+stimulus). Curiosity multiplies onset, sociability lerps the user candidate —
+this is how calm "glances rather than stares" (its baselines are low) without
+a dedicated novelty-weight temperament field.
+
+Hysteresis: switch margin 0.15 + minimum dwell 350 ms, in one testable
+`shouldSwitch` rule. `snap(to:)` is the reflex override: instant jump,
+attention pinned to 1, bypassing both.
+
+Pursuit: saccade tau 40 ms for the first 120 ms after a switch, then pursuit
+tau lerped 0.35 s → 0.08 s by attention. An earlier draft *also* blended the
+pursued point toward neutral by attention — that double-modeled looseness
+(the slow tau already is the loose tracking, and drifting home happens via
+the arbiter when flattened salience lets neutral win) and broke pursuit lock;
+removed.
+
+One test expectation was corrected against the doc rather than the code: a
+stale onset releases to the **user** candidate when a focused window is still
+present ("drift to a window that just opened, then settle back on the user"),
+not to neutral.
+
+Idle micro-saccades and blink during neutral gaze are Brain-tick touches
+(they need the injected RNG), deferred to the Brain integration task, not
+GazeSystem state.
+
 ---
 
 ## Deferred follow-ups discovered during the build
