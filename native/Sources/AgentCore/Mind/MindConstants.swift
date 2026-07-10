@@ -68,4 +68,24 @@ public enum MindConstants {
     public static let accelSquashGain: Double = 0.0006
     /// Hard bound on |squash| per axis — an extreme frame can never fold the body.
     public static let maxSquash: Double = 0.35
+
+    // MARK: Steering (decision log D12 — forces, not mode-lerps)
+
+    /// How eagerly a behavior corrects toward its desired velocity (1/s): the force is
+    /// `(desired − current) * steeringGain`. Higher = snappier turns, lower = drifty.
+    public static let steeringGain: Double = 3.0
+    /// Distance (px) inside which `arrive` starts scaling its desired speed down, so
+    /// approaches end in a settle instead of an overshoot-and-oscillate.
+    public static let arriveSlowRadius: Double = 120
+    /// Magnitude (px/s²) of the wander force — a gentle amble, meant to lose to any
+    /// purposeful behavior it composes with.
+    public static let wanderStrength: Double = 60
+    /// How fast the wander heading can drift (rad/s at full jitter draw). Small enough
+    /// that the path curves smoothly rather than twitching.
+    public static let wanderJitterRadiansPerSecond: Double = 4.0
+    /// Distance (px) from a screen edge at which the inward repulsion engages.
+    public static let edgeAvoidMargin: Double = 80
+    /// Repulsion (px/s²) at full edge penetration; falls off quadratically across the
+    /// margin so the boundary feels like a soft cushion, not a wall.
+    public static let edgeAvoidStrength: Double = 600
 }

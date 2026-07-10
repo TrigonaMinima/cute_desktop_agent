@@ -1,20 +1,6 @@
 import Testing
 @testable import AgentCore
 
-/// Returns queued values in order, then 0.5 forever — lets a test pin exactly one draw
-/// (e.g. the screen-switch decision) without hunting for a seed that happens to produce it.
-private final class ScriptedRandom: RandomProvider {
-    private var values: [Double]
-
-    init(_ values: [Double]) {
-        self.values = values
-    }
-
-    func nextUnit() -> Double {
-        values.isEmpty ? 0.5 : values.removeFirst()
-    }
-}
-
 // Multi-display behavior: the screen-switch draw when starting wander/rest, the
 // single-screen RNG-sequence guarantee (no extra draw, so existing seeded behavior is
 // byte-identical), mid-glide dead-zone tolerance via reconcilePosition, arrival/drag

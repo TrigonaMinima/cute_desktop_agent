@@ -54,3 +54,18 @@ enum TestFixtures {
         )
     }
 }
+
+/// Returns queued values in order, then 0.5 forever — lets a test pin exact draws
+/// (e.g. one wander-jitter or screen-switch decision) without hunting for a seed that
+/// happens to produce them.
+final class ScriptedRandom: RandomProvider {
+    private var values: [Double]
+
+    init(_ values: [Double]) {
+        self.values = values
+    }
+
+    func nextUnit() -> Double {
+        values.isEmpty ? 0.5 : values.removeFirst()
+    }
+}
