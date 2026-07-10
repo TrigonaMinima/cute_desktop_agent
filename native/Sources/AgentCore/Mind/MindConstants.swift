@@ -53,4 +53,19 @@ public enum MindConstants {
     public static let mediaStillnessSeconds: Double = 3
     /// Fraction of its nearest screen a window must cover to count as fullscreen-ish.
     public static let fullscreenCoverageRatio: Double = 0.9
+
+    // MARK: Physics body (unit mass, px/sec units)
+
+    /// Linear drag (1/s): the velocity fraction shed per second absent applied force.
+    /// Sets the "weight" of the glide — how quickly Jiggy coasts to a stop.
+    public static let linearDampingPerSecond: Double = 4.0
+    /// Deformation spring stiffness (1/s²) pulling `squash` home to zero.
+    public static let squashStiffness: Double = 90
+    /// Deformation damping (1/s) — a touch underdamped on purpose, so arrivals carry a
+    /// small jelly overshoot (follow-through for free).
+    public static let squashDamping: Double = 12
+    /// How strongly acceleration excites the deformation spring (s²/px, dimensionless out).
+    public static let accelSquashGain: Double = 0.0006
+    /// Hard bound on |squash| per axis — an extreme frame can never fold the body.
+    public static let maxSquash: Double = 0.35
 }
