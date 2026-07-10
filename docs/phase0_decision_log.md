@@ -183,6 +183,33 @@ Idle micro-saccades and blink during neutral gaze are Brain-tick touches
 (they need the injected RNG), deferred to the Brain integration task, not
 GazeSystem state.
 
+## D14. Reflex arc shape
+
+One detected stimulus in v0: the cursor darting at the body — close (≤250 px)
+and *closing* fast (velocity projected onto the cursor→body line, so a cursor
+racing away never triggers). Effective intensity = raw closing speed ×
+`temperament.reflexGain` × (1 − habituation), thresholded into the doc's
+startle (≥0.5) / flinch (≥0.25) / wary-watch (≥0.12) / nothing ladder — the
+interrupt and the anti-repetition progression are literally one multiply.
+
+Reflex habituation is event-based (each dart deposits 3 s of equivalent
+exposure into the shared store under key "cursorDart"), unlike gaze's
+continuous per-tick exposure — a poke is an event, not a duration. Recovery
+is the store's normal decay, driven once per tick by the Brain, so "leave it
+alone and sensitivity recovers" needs no extra mechanism. A tuned-out
+stimulus still deepens habituation.
+
+The arc detects and times; it does not apply consequences. The Brain maps a
+fired event to gaze `snap`, the `DriveImpulse.startle` arousal spike, the
+surprised face, and — per the doc's "resume or re-arbitrate" rule — a forced
+re-score when the event ends (default re-arbitrate, never blind resume).
+Wary watch is eyes-only: `steeringForce` returns nil for it, so the body
+never twitches on the third poke, only the gaze sharpens.
+
+Window-onset-near-body as a second reflex stimulus is deferred — the dart
+covers the doc's canonical case; the arc's detect/tier/duration split makes
+adding stimuli additive.
+
 ---
 
 ## Deferred follow-ups discovered during the build

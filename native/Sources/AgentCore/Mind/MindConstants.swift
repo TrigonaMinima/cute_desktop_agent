@@ -130,4 +130,27 @@ public enum MindConstants {
     public static let neutralGazeDropPx: Double = 60
     /// Gaze offset (px) at which `direction(from:)` reports full pupil deflection.
     public static let gazeDirectionFullDeflectionPx: Double = 150
+
+    // MARK: Reflex arc (design doc layer 2)
+
+    /// Cursor must be within this many px of body center for a dart to register.
+    public static let reflexDartDistancePx: Double = 250
+    /// Closing speed (px/s) below which cursor motion isn't a dart at all.
+    public static let reflexDartMinClosingSpeed: Double = 600
+    /// Closing speed (px/s) at which a dart's raw intensity saturates at 1.
+    public static let reflexDartFullClosingSpeed: Double = 2000
+    /// Post-gain intensity tiers: the startle → flinch → wary-watch → nothing ladder.
+    public static let reflexStartleThreshold: Double = 0.5
+    public static let reflexFlinchThreshold: Double = 0.25
+    public static let reflexWaryWatchThreshold: Double = 0.12
+    /// How long each response tier holds the body (or, for wary watch, the eyes), ms.
+    public static let startleDurationMs: Double = 700
+    public static let flinchDurationMs: Double = 350
+    public static let waryWatchDurationMs: Double = 900
+    /// Dead time (ms) after an event ends before the arc may fire again — one poke is
+    /// one reaction, not a machine-gun of them across consecutive frames.
+    public static let reflexRefractoryMs: Double = 400
+    /// Habituation exposure (equivalent seconds) each detected stimulus deposits —
+    /// event-based, unlike gaze's continuous per-tick exposure of the same store.
+    public static let reflexEventExposureSeconds: Double = 3
 }
