@@ -9,6 +9,21 @@ public struct AppConfig: Decodable {
     public let bundleIdentifier: String
     public let statusItemTitle: String
     public let avatar: AvatarKind
+    /// Which brain drives the agent — optional so an older config.json without the key
+    /// still decodes; read through `brainKind` for the default.
+    private let brain: BrainKind?
+
+    /// The emergent brain is the default; `"brain": "classic"` in config.json is the
+    /// rollback switch to the blob.js-parity StateMachine.
+    public var brainKind: BrainKind { brain ?? .emergent }
+}
+
+/// The set of `AgentBrain` conformers `config.json`'s `brain` field may name. Same
+/// decode-to-enum discipline as `AvatarKind`: an unrecognized value is a config decode
+/// error at launch, not a fallback deep in brain selection.
+public enum BrainKind: String, Decodable {
+    case classic
+    case emergent
 }
 
 /// The set of `Avatar` conformers `config.json`'s `avatar` field may name. Decoding

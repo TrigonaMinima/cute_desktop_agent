@@ -2,5 +2,6 @@
   "displayName": "Jiggy",
   "bundleIdentifier": "com.jiggy.agent",
   "statusItemTitle": "🟢",
-  "avatar": "slime"
+  "avatar": "slime",
+  "brain": "emergent"
 }

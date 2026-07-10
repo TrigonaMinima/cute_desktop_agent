@@ -7,14 +7,18 @@ import AgentCore
 /// rendering the same global-web-space state each frame (each panel just offsets by its
 /// display's origin) — see `ScreenLayout`.
 public final class AppDelegate: NSObject, NSApplicationDelegate {
-    // Shared with `stateMachine` below — `render`'s `now` and `StateMachine.tick`'s internal
-    // timer comparisons (modeEndsAt, happyUntil, ...) must read the same clock instance, or
-    // every timer is off by however far apart the two instances were constructed.
+    // Shared with `brain` below — `render`'s `now` and the brain's internal timer
+    // comparisons (modeEndsAt, cognition slices, ...) must read the same clock instance,
+    // or every timer is off by however far apart the two instances were constructed.
     private let clock = SystemClock()
-    private lazy var stateMachine = StateMachine(rng: SystemRandom(), clock: clock)
-    // Shares `clock` with `stateMachine` for the same reason as above — the typing
-    // signal's "how long since the last keystroke" comparison must use the same clock
-    // instance the rest of the tick's timers do.
+    /// The active brain, selected from `config.json`'s `brain` key at launch (see
+    /// `AppConfig.brainKind`) — built in `applicationDidFinishLaunching` because it
+    /// needs the decoded config. Everything after construction goes through the
+    /// `AgentBrain` seam, so the shell never branches on which brain is live.
+    private var brain: AgentBrain!
+    // Shares `clock` with `brain` for the same reason as above — the typing signal's
+    // "how long since the last keystroke" comparison must use the same clock instance
+    // the rest of the tick's timers do.
     private lazy var perception = Perception(clock: clock)
     // See `LaunchAtLoginController`'s doc comment for why this must be a stored property.
     private let launchAtLogin = LaunchAtLoginController()
@@ -70,7 +74,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let layout = ScreenLayout.current(fallback: nil) else { fatalError("AgentApp: no screen") }
 
-        state = stateMachine.makeInitialState(
+        brain = makeBrain(kind: config.brainKind)
+        state = brain.makeInitialState(
             screens: layout.screens, avatarSize: config.makeAvatar().intrinsicSize, now: clock.now()
         )
 
@@ -153,14 +158,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         runtime.frameClock.start()
     }
 
-    /// The per-frame driver `FrameClock` calls: poll perception, advance the state
-    /// machine, render every panel, refresh hit-testing, then push the live menus — in
-    /// that order (mirrors the POC's `tick()`; see AgentCore's `StateMachine.tick` doc
+    /// Builds the config-selected brain. Both share the delegate's clock (see the
+    /// `clock` doc comment); the emergent brain also gets a wall-clock hour reader for
+    /// its circadian baselines — fractional, so 14:30 reads as 14.5.
+    private func makeBrain(kind: BrainKind) -> AgentBrain {
+        switch kind {
+        case .classic:
+            return StateMachine(rng: SystemRandom(), clock: clock)
+        case .emergent:
+            return EmergentBrain(rng: SystemRandom(), clock: clock, hourOfDay: {
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: Date())
+                return Double(parts.hour ?? 12) + Double(parts.minute ?? 0) / 60
+            })
+        }
+    }
+
+    /// The per-frame driver `FrameClock` calls: poll perception, advance the brain,
+    /// render every panel, refresh hit-testing, then push the live menus — in that
+    /// order (mirrors the POC's `tick()`; see AgentCore's `StateMachine.tick` doc
     /// comment for why blink/emotion must run even mid-drag).
     private func tick(now: Double, dt: Double) {
         guard let runtime else { return }
         applyPerception(dt: dt, layout: runtime.layout)
-        stateMachine.tick(state: &state, dt: dt)
+        brain.tick(state: &state, dt: dt)
         // Squash/bob is panel-invariant — compute once, share across every panel's render.
         let motion = computeBodyMotion(state: state, now: now)
         for screenPanel in runtime.panels {
@@ -208,16 +228,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         avatarView.onMouseDown = { [weak self] point in
             guard let self else { return }
             self.state.world.cursor = Point(x: Double(point.x), y: Double(point.y))
-            self.stateMachine.beginDrag(state: &self.state)
+            self.brain.beginDrag(state: &self.state)
         }
         avatarView.onMouseDragged = { [weak self] point in
             guard let self else { return }
             self.state.world.cursor = Point(x: Double(point.x), y: Double(point.y))
-            self.stateMachine.updateDrag(state: &self.state)
+            self.brain.updateDrag(state: &self.state)
         }
         avatarView.onMouseUp = { [weak self] in
             guard let self else { return }
-            self.stateMachine.endDrag(state: &self.state, now: self.clock.now())
+            self.brain.endDrag(state: &self.state, now: self.clock.now())
         }
     }
 

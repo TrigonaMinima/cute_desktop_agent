@@ -120,12 +120,13 @@ public final class AvatarView: NSView {
             applyBubble(for: state.body.emotion)
         }
 
-        // Blink is a transient on top of the applied face, re-composed every frame
-        // (independent of the emotion-change branch above) since it toggles far more
-        // often than the emotion does.
+        // Blink and gaze are transients on top of the applied face, re-composed every
+        // frame (independent of the emotion-change branch above) since they change far
+        // more often than the emotion does.
         if let face = currentFace {
-            applyEyeTransform(face.leftEye, blinking: state.memory.blinking, to: layers.eyeLeft)
-            applyEyeTransform(face.rightEye, blinking: state.memory.blinking, to: layers.eyeRight)
+            let gaze = eyeGazeOffset(state: state)
+            applyEyeTransform(face.leftEye, blinking: state.memory.blinking, gazeOffset: gaze, to: layers.eyeLeft)
+            applyEyeTransform(face.rightEye, blinking: state.memory.blinking, gazeOffset: gaze, to: layers.eyeRight)
         }
 
         // blob.js: bubbleEl translate(state.x + BLOB_WIDTH/2 - 9, state.y - 16).
@@ -159,10 +160,37 @@ public final class AvatarView: NSView {
         )
     }
 
-    private func applyEyeTransform(_ spec: EyeSpec, blinking: Bool, to layer: CAShapeLayer) {
-        let rotation = CATransform3DMakeRotation(spec.rotationDegrees * .pi / 180, 0, 0, 1)
+    /// Max px the eyes shift toward the gaze target at full deflection — the emergent
+    /// gaze spine made visible. Subtle on purpose: the eyes glance, they don't roam.
+    private let gazeEyeDeflectionPx: CGFloat = 3
+
+    /// Where the mind's eyes are pointed, as a view-space offset for the eye layers.
+    /// Zero when no mind is driving (the classic brain), so that path renders exactly
+    /// as before. Gaze direction is already unit-clamped (see `GazeSystem.direction`),
+    /// and web space and this flipped view share the same y-down axis — no conversion.
+    private func eyeGazeOffset(state: AgentState) -> CGPoint {
+        guard let mind = state.mind else { return .zero }
+        let size = avatar.intrinsicSize
+        let center = Point(
+            x: state.body.position.x + size.width / 2,
+            y: state.body.position.y + size.height / 2
+        )
+        let direction = mind.gaze.direction(from: center)
+        return CGPoint(
+            x: CGFloat(direction.dx) * gazeEyeDeflectionPx,
+            y: CGFloat(direction.dy) * gazeEyeDeflectionPx
+        )
+    }
+
+    private func applyEyeTransform(
+        _ spec: EyeSpec, blinking: Bool, gazeOffset: CGPoint, to layer: CAShapeLayer
+    ) {
+        // Right-to-left on the layer: rotate/blink the eye shape in place, then shift
+        // the whole eye toward the gaze point.
+        let shift = CATransform3DMakeTranslation(gazeOffset.x, gazeOffset.y, 0)
+        let rotated = CATransform3DRotate(shift, spec.rotationDegrees * .pi / 180, 0, 0, 1)
         let blinkScaleY: CGFloat = blinking ? 0.15 : 1
-        layer.transform = CATransform3DScale(rotation, 1, blinkScaleY, 1)
+        layer.transform = CATransform3DScale(rotated, 1, blinkScaleY, 1)
     }
 
     private func apply(_ spec: MouthSpec, to layer: CAShapeLayer) {

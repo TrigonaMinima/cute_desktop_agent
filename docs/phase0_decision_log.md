@@ -289,6 +289,37 @@ Load-bearing choices inside that order:
 
 ---
 
+## D17. Shell wiring: the AgentBrain seam, config switch, and gaze rendering
+
+**Decision**: a five-method `AgentBrain` protocol in AgentCore
+(`makeInitialState` / `tick` / `beginDrag` / `updateDrag` / `endDrag`) is the
+only thing the AppKit shell knows about. `StateMachine` conforms as-is;
+`EmergentBrain` conforms via a protocol overload that defaults temperament to
+`.calm` (the preset submenu in a later task overrides per-launch). Selection is
+a new `"brain"` key in `config.json` — decoded to an enum like `avatar`, so an
+unrecognized value is a launch-time decode error. **The key is optional and
+defaults to `emergent`**; `"brain": "classic"` is the rollback switch.
+
+Rendering choices that came with the wiring:
+
+- **Gaze is rendered as a whole-eye deflection**, not new pupil layers: the
+  existing eye shapes shift up to 3 px toward `GazeSystem.direction(from:)`,
+  composed into the same per-frame transform as rotation and blink. Zero when
+  no mind is driving, so the classic path renders pixel-identical. Chosen over
+  adding pupils because it changes no face geometry and therefore no reaction
+  assets — the CLAUDE.md rule about presenting new/changed reactions for
+  confirmation isn't triggered. If pupils are ever wanted, that's a
+  user-reviewed reaction change first.
+- **Squash on the emergent path is the physics spring's state**: 
+  `computeBodyMotion` maps `mind.physics.squash` straight to scale, composed
+  with the classic idle breathing wobble, and skips the canned moving-scale
+  clip (deformation follows real acceleration — the design doc's "expression
+  is a side effect of forces"). Dragging keeps the classic pinch scale.
+- The emergent brain's `hourOfDay` is wired to the wall clock as a fractional
+  hour (14:30 → 14.5) read via `Calendar` each cognition slice.
+
+---
+
 ## Deferred follow-ups discovered during the build
 
 - Authored yawn/stretch/wary-watch set-piece faces (need user-confirmed

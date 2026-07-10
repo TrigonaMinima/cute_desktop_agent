@@ -104,4 +104,52 @@ struct BodyMotionTests {
         #expect(motion.scaleY == 1 + wobble * 0.03)
         #expect(motion.scaleX == 1 - wobble * 0.02)
     }
+
+    // MARK: emergent mind path (physics-driven squash, no canned move-squash clip)
+
+    private func makeMindState(
+        squash: Vector = Vector(dx: 0, dy: 0), dragging: Bool = false, moving: Bool = false
+    ) -> AgentState {
+        var state = TestFixtures.makeState(mode: .idle, dragging: dragging, moving: moving)
+        var mind = MindState(
+            temperament: .calm, position: state.body.position, hourOfDay: 15, now: 0
+        )
+        mind.physics.squash = squash
+        state.mind = mind
+        return state
+    }
+
+    @Test func mindPath_physicsSquashMapsStraightToScale() {
+        let state = makeMindState(squash: Vector(dx: 0.2, dy: -0.1))
+        let motion = computeBodyMotion(state: state, now: 0) // wobble 0
+        #expect(motion.scaleX == 1.2)
+        #expect(motion.scaleY == 0.9)
+    }
+
+    @Test func mindPath_moving_doesNotUseTheFixedMovingSquash() {
+        // Deformation follows real acceleration (the physics spring), not a canned
+        // moving-scale clip — zero squash while moving renders undeformed.
+        let state = makeMindState(moving: true)
+        let motion = computeBodyMotion(state: state, now: 0)
+        #expect(motion.scaleX == 1)
+        #expect(motion.scaleY == 1)
+    }
+
+    @Test func mindPath_breathingWobbleComposesWithSquash() {
+        let state = makeMindState(squash: Vector(dx: 0.1, dy: 0.1))
+        let now = 250.0
+        let motion = computeBodyMotion(state: state, now: now)
+        let wobble = sin(now / 1000 * 2.2)
+        #expect(motion.scaleX == 1 - wobble * 0.02 + 0.1)
+        #expect(motion.scaleY == 1 + wobble * 0.03 + 0.1)
+        #expect(motion.bobY == wobble * 3)
+    }
+
+    @Test func mindPath_dragging_keepsTheClassicDragSquash() {
+        let state = makeMindState(squash: Vector(dx: 0.2, dy: 0.2), dragging: true)
+        let motion = computeBodyMotion(state: state, now: 250)
+        #expect(motion.scaleX == 1.05)
+        #expect(motion.scaleY == 0.95)
+        #expect(motion.bobY == 0)
+    }
 }

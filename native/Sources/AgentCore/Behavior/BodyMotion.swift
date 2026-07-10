@@ -23,6 +23,12 @@ public func computeBodyMotion(state: AgentState, now: Double) -> BodyMotion {
     if state.body.dragging {
         scaleX = Constants.dragScale.x
         scaleY = Constants.dragScale.y
+    } else if let mind = state.mind {
+        // Emergent path: deformation is the physics spring's state, excited by real
+        // acceleration (design doc layer 7 — no canned move-squash clip), composed
+        // with the same idle breathing wobble so a settled body still reads alive.
+        scaleX = 1 - wobble * Constants.idleWobbleScaleX + mind.physics.squash.dx
+        scaleY = 1 + wobble * Constants.idleWobbleScaleY + mind.physics.squash.dy
     } else if state.body.mode == .happy {
         let progress = clamp(1 - (state.memory.happyUntil - now) / Constants.happyDurationMs, min: 0, max: 1)
         let bounce = sin(progress * Double.pi * 3) * (1 - progress)
