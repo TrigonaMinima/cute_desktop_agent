@@ -59,7 +59,6 @@ public struct GazeSystem: Codable, Equatable {
     /// Where the committed target currently is (moves with the candidate under pursuit).
     var targetPoint: Point
     var lastSwitchAt: Double
-    var habituation: Habituation
     /// Frontmost app+window identity last tick, for onset detection.
     var lastWindowKey: String?
     var lastOnsetAt: Double?
@@ -72,15 +71,19 @@ public struct GazeSystem: Codable, Equatable {
         attention = 0.2
         targetPoint = rest
         lastSwitchAt = now
-        habituation = Habituation()
     }
 
     // MARK: Per-frame update
 
-    public mutating func update(context: GazeContext, now: Double, dt: Double) {
+    /// `habituation` is the mind-wide shared store (the reflex arc writes the same one),
+    /// borrowed rather than owned so "the same habituation counters" is true by
+    /// construction.
+    public mutating func update(
+        context: GazeContext, habituation: inout Habituation, now: Double, dt: Double
+    ) {
         detectOnset(world: context.world, now: now)
 
-        let candidates = scoredCandidates(context: context, now: now)
+        let candidates = scoredCandidates(context: context, habituation: habituation, now: now)
         let incumbent = candidates.first { $0.kind == targetKind }
         let winner = candidates.max { $0.salience < $1.salience }!
         if winner.kind != targetKind,
@@ -99,7 +102,8 @@ public struct GazeSystem: Codable, Equatable {
         targetPoint = current?.point ?? Self.neutralPoint(bodyCenter: context.bodyCenter)
 
         habituation.expose(targetKind.rawValue, dt: dt, rate: context.temperament.habituationRate)
-        habituation.recover(dt: dt, except: targetKind.rawValue)
+        // Recovery for everything unattended is the Brain's once-per-tick job on the
+        // shared store — doing it here too would double-decay the reflex keys.
 
         let salience = current?.salience ?? 0
         attention += (min(1, salience) - attention) * (1 - exp(-dt / MindConstants.attentionTauSeconds))
@@ -153,7 +157,7 @@ public struct GazeSystem: Codable, Equatable {
     /// Scores every present candidate. Non-neutral scores are scaled by arousal (low
     /// arousal flattens everything, so the eyes drift home) and suppressed by their own
     /// habituation; neutral is a fixed floor that wins when nothing else clears it.
-    func scoredCandidates(context: GazeContext, now: Double) -> [Candidate] {
+    func scoredCandidates(context: GazeContext, habituation: Habituation, now: Double) -> [Candidate] {
         let world = context.world
         let drives = context.drives
         let arousalGain = lerp(MindConstants.gazeLowArousalGainFloor, 1.0, drives.arousal)

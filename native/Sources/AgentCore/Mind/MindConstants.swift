@@ -131,6 +131,24 @@ public enum MindConstants {
     /// Gaze offset (px) at which `direction(from:)` reports full pupil deflection.
     public static let gazeDirectionFullDeflectionPx: Double = 150
 
+    // MARK: Arbitration (design doc layer 5 — softmax + hysteresis)
+
+    /// Softmax temperature over behavior scores: low enough that a clear winner nearly
+    /// always wins, high enough that near-ties stay genuinely stochastic.
+    public static let behaviorSoftmaxTemperature: Double = 0.15
+    /// Flat score bonus the incumbent behavior gets — the arbiter's hysteresis, so a
+    /// marginal challenger doesn't flip the body every cognition tick.
+    public static let behaviorIncumbentBonus: Double = 0.15
+    /// Minimum ms a committed behavior holds before re-scoring (unless a forced
+    /// re-arbitration — reflex end, arrival, yield trigger — cuts it short).
+    public static let behaviorMinCommitmentMs: Double = 2500
+    /// The idle candidate's constant score: doing nothing is always on the table.
+    public static let idleBehaviorScore: Double = 0.25
+    /// Yield's score when the body overlaps the user's working zone — far above
+    /// anything the drive-led candidates can reach, because sitting on the user's
+    /// caret is never acceptable.
+    public static let yieldBehaviorScore: Double = 3.0
+
     // MARK: Reflex arc (design doc layer 2)
 
     /// Cursor must be within this many px of body center for a dart to register.

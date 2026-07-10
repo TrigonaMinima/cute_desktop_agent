@@ -165,13 +165,21 @@ public struct AgentState: Codable, Equatable {
     public var world: AgentWorld
     public var body: AgentBody
     public var memory: AgentMemory
+    /// The emergent brain's belief region (decision log D4), written only by
+    /// `EmergentBrain`. `nil` whenever the classic `StateMachine` is driving, so the
+    /// classic path's state shape (and its parity tests) are untouched.
+    public var mind: MindState?
     /// Open extension bag for future signals. Empty today; no consumer reads it yet.
     public var context: [String: JSONValue]
 
-    public init(world: AgentWorld, body: AgentBody, memory: AgentMemory, context: [String: JSONValue] = [:]) {
+    public init(
+        world: AgentWorld, body: AgentBody, memory: AgentMemory,
+        mind: MindState? = nil, context: [String: JSONValue] = [:]
+    ) {
         self.world = world
         self.body = body
         self.memory = memory
+        self.mind = mind
         self.context = context
     }
 

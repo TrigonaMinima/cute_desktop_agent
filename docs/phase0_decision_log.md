@@ -210,6 +210,41 @@ Window-onset-near-body as a second reflex stimulus is deferred — the dart
 covers the doc's canonical case; the arc's detect/tier/duration split makes
 adding stimuli additive.
 
+## D15. Arbiter shape (behavior scoring + softmax pick)
+
+Behavior menu for v0: idle / rest / wander / inspect / yield. Reflexes are
+deliberately not in this list — they preempt whoever holds the body and are
+never scored, which is how "arbiter hysteresis never gates reflexes" is made
+structural rather than a rule someone must remember.
+
+Scores are live drive levels, shaped by two multipliers:
+
+- **Spontaneity** = `max(livelinessFloor(mode), deference(mode) × arousal)`.
+  Liveliness floors are *minimums* that prevent collapse-to-lifeless (the doc's
+  collapse trap), never ceilings; deference (media 0.15, focus-typing 0.4,
+  otherwise 1.0) is what suppresses spontaneous movement in considerate modes.
+  Wander and inspect are spontaneous (scaled); rest and idle are not — being
+  tired or simply present defers to nothing.
+- **Inspect engagement**: inspect scores `curiosity × attention` only when gaze
+  is on an external object (cursor/onset/user/motion) — neutral rest and the
+  agent's own locomotion target don't count as something to inspect.
+
+Yield only becomes a candidate when the body overlaps the user's working zone,
+and then its constant score (3.0) dominates everything: sitting on the caret is
+never acceptable, and making it a candidate-with-huge-score rather than a hard
+override keeps one arbitration path instead of two.
+
+Pick = flat incumbent bonus (0.15, the hysteresis) + temperature softmax
+(T = 0.15) over scores via the existing `weightedChoice`. Low temperature means
+clear winners nearly always win; near-ties stay genuinely stochastic — variety
+without twitchiness. Committed behaviors also hold for a minimum 2500 ms unless
+a forced re-arbitration (reflex end, arrival, yield trigger) cuts in.
+
+Habituation ownership was refactored while wiring this: `GazeSystem` no longer
+owns a store; the Brain owns one mind-wide `Habituation` (gaze and reflex both
+key into it) and drives recovery exactly once per tick, so the reflex keys are
+never double-decayed.
+
 ---
 
 ## Deferred follow-ups discovered during the build
