@@ -47,4 +47,27 @@ struct MindStateTests {
         let json = String(data: data, encoding: .utf8)!
         #expect(!json.contains("\"mind\""))
     }
+
+    // MARK: StatusSummary surfacing (project rule: every new state attribute shows up)
+
+    @Test func statusSummary_withoutMind_hasNoMindSection() {
+        let summary = TestFixtures.makeState().statusSummary(now: 0)
+        #expect(!summary.sections.contains { $0.title == "Mind" })
+    }
+
+    @Test func statusSummary_withMind_addsAMindSection() {
+        var state = TestFixtures.makeState()
+        state.mind = MindState(temperament: .calm, position: position, hourOfDay: 15, now: 0)
+        let summary = state.statusSummary(now: 0)
+        let mindSection = summary.sections.first { $0.title == "Mind" }
+        #expect(mindSection != nil)
+        let labels = mindSection!.rows.map(\.label)
+        #expect(labels.contains("Behavior"))
+        #expect(labels.contains("Situation"))
+        #expect(labels.contains("Power"))
+        #expect(labels.contains("Energy"))
+        #expect(labels.contains("Boredom"))
+        #expect(labels.contains("Gaze"))
+        #expect(labels.contains("Reflex"))
+    }
 }

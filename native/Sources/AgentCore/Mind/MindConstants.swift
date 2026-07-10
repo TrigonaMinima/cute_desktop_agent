@@ -148,6 +148,26 @@ public enum MindConstants {
     /// anything the drive-led candidates can reach, because sitting on the user's
     /// caret is never acceptable.
     public static let yieldBehaviorScore: Double = 3.0
+    /// Energy deficit subtracted from the rest score before it competes: rest only
+    /// outbids idle once energy has genuinely sagged, not at an average baseline.
+    public static let restEnergySlack: Double = 0.3
+
+    // MARK: Brain motor policy (behavior → desired speed / target geometry)
+
+    /// Everyday locomotion speed cap (px/s), scaled by `Temperament.tempo`.
+    public static let cruiseSpeedPxPerSecond: Double = 120
+    /// Yield moves with urgency — getting off the user's caret shouldn't dawdle.
+    public static let yieldSpeedPxPerSecond: Double = 220
+    /// Reflex flight is the fastest thing the body ever does.
+    public static let reflexFleeSpeedPxPerSecond: Double = 340
+    /// Speed (px/s) above which the body reads as "moving" for render/status purposes.
+    public static let bodyMovingThresholdPxPerSecond: Double = 8
+    /// Inspect approaches its object of interest to this stand-off distance (px),
+    /// leaning in to look rather than sitting on the thing.
+    public static let inspectStandOffPx: Double = 140
+    /// Within this distance (px) of a behavior target the trip counts as arrived,
+    /// clearing the target and forcing a re-arbitration.
+    public static let arriveRadiusPx: Double = 12
 
     // MARK: Reflex arc (design doc layer 2)
 

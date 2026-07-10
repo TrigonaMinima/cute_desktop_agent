@@ -57,7 +57,9 @@ public enum BehaviorScoring {
         var scores: [(BehaviorKind, Double)] = [
             // A constant floor: doing nothing in particular is always a candidate.
             (.idle, MindConstants.idleBehaviorScore),
-            (.rest, 1 - drives.energy),
+            // Slack keeps merely-average energy (calm's 0.5 baseline) from making rest
+            // the default posture — only a genuine deficit outbids idle presence.
+            (.rest, max(0, (1 - drives.energy) - MindConstants.restEnergySlack)),
             (.wander, drives.boredom * spontaneity),
             (.inspect, drives.curiosity * inspectEngagement(kind: gazeKind, attention: gazeAttention) * spontaneity),
         ]

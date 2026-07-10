@@ -17,6 +17,12 @@ public struct Habituation: Codable, Equatable {
         levels[key] ?? 0
     }
 
+    /// The most-fatigued stimulus right now, or nil for a fresh store — a status-surface
+    /// readout, not part of the dynamics.
+    public func strongest() -> (key: String, level: Double)? {
+        levels.max { $0.value < $1.value }.map { ($0.key, $0.value) }
+    }
+
     /// Grows `key` toward 1 over `dt` seconds of exposure. `rate` scales the speed —
     /// `Temperament.habituationRate`, where calm (>1) tires of stimuli quickly and
     /// gremlin (<1) stays engaged. Floored so a pathological rate can't freeze growth.

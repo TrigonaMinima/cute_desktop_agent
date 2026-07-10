@@ -38,7 +38,7 @@ public extension AgentState {
     /// everywhere else in `AgentCore` — see `Clock.swift`) is taken explicitly, not read
     /// from a hidden clock, so memory-timer countdowns stay pure and testable.
     func statusSummary(now: Double) -> StatusSummary {
-        StatusSummary(sections: [
+        var sections = [
             StatusSummary.Section(title: "Body", rows: [
                 .init(label: "Mode", value: StatusSummary.displayName(for: body.mode)),
                 .init(label: "Emotion", value: StatusSummary.displayName(for: body.emotion)),
@@ -73,11 +73,36 @@ public extension AgentState {
                     value: StatusSummary.formatCountdown(target: memory.yieldCooldownUntil, now: now)
                 ),
             ]),
-        ])
+        ]
+        if let mind {
+            sections.append(StatusSummary.mindSection(for: mind, now: now))
+        }
+        return StatusSummary(sections: sections)
     }
 }
 
 private extension StatusSummary {
+    /// The emergent brain's belief state, present only when the mind region exists —
+    /// the classic path's summary shape is untouched. Any new `MindState` attribute
+    /// surfaced here shows up on both menu surfaces automatically (project rule).
+    static func mindSection(for mind: MindState, now: Double) -> Section {
+        Section(title: "Mind", rows: [
+            .init(label: "Behavior", value: displayName(for: mind.behavior)),
+            .init(label: "Behavior target", value: mind.behaviorTarget.map(formatPoint) ?? "\u{2014}"),
+            .init(label: "Situation", value: displayName(for: mind.situation.mode)),
+            .init(label: "Power", value: displayName(for: mind.power)),
+            .init(label: "Energy", value: formatPercent(mind.drives.energy)),
+            .init(label: "Curiosity", value: formatPercent(mind.drives.curiosity)),
+            .init(label: "Sociability", value: formatPercent(mind.drives.sociability)),
+            .init(label: "Comfort", value: formatPercent(mind.drives.comfort)),
+            .init(label: "Arousal", value: formatPercent(mind.drives.arousal)),
+            .init(label: "Boredom", value: formatPercent(mind.drives.boredom)),
+            .init(label: "Gaze", value: formatGaze(mind.gaze)),
+            .init(label: "Reflex", value: formatReflex(mind.reflex, now: now)),
+            .init(label: "Habituation peak", value: formatHabituationPeak(mind.habituation)),
+        ])
+    }
+
     /// Exhaustive by construction (`switch`, not a dictionary lookup) so a future `Mode`
     /// case fails to compile here instead of silently falling back — unlike
     /// `Constants.baseEmotionByMode`/`modeDwellMsRange`, which deliberately omit `.happy`
@@ -104,6 +129,75 @@ private extension StatusSummary {
         case .annoyed: return "Annoyed"
         case .blush: return "Blushing"
         }
+    }
+
+    /// Exhaustive by construction — see `displayName(for: Mode)` above.
+    static func displayName(for behavior: BehaviorKind) -> String {
+        switch behavior {
+        case .idle: return "Idle"
+        case .rest: return "Resting"
+        case .wander: return "Wandering"
+        case .inspect: return "Inspecting"
+        case .yield: return "Yielding"
+        }
+    }
+
+    /// Exhaustive by construction — see `displayName(for: Mode)` above.
+    static func displayName(for situation: SituationMode) -> String {
+        switch situation {
+        case .focusTyping: return "Focused typing"
+        case .casualBrowsing: return "Casual browsing"
+        case .mediaWatching: return "Watching media"
+        case .idleAway: return "Idle / away"
+        }
+    }
+
+    /// Exhaustive by construction — see `displayName(for: Mode)` above.
+    static func displayName(for power: PowerTier) -> String {
+        switch power {
+        case .awake: return "Awake"
+        case .dozing: return "Dozing"
+        case .sleeping: return "Sleeping"
+        }
+    }
+
+    /// Exhaustive by construction — see `displayName(for: Mode)` above.
+    static func displayName(for kind: GazeTargetKind) -> String {
+        switch kind {
+        case .neutral: return "Neutral"
+        case .cursor: return "Cursor"
+        case .onset: return "Onset"
+        case .user: return "User"
+        case .motion: return "Motion"
+        case .locomotion: return "Locomotion"
+        }
+    }
+
+    static func formatPercent(_ unit: Double) -> String {
+        "\(Int((unit * 100).rounded()))%"
+    }
+
+    /// "Cursor (attention 82%)" — where the eyes are and how engaged they are.
+    static func formatGaze(_ gaze: GazeSystem) -> String {
+        "\(displayName(for: gaze.targetKind)) (attention \(formatPercent(gaze.attention)))"
+    }
+
+    /// "Startle (ends in 0.3s)" while an event holds, an em dash otherwise.
+    static func formatReflex(_ reflex: ReflexArc, now: Double) -> String {
+        guard let active = reflex.active, now < active.endsAt else { return "\u{2014}" }
+        let name: String
+        switch active.kind {
+        case .startle: name = "Startle"
+        case .flinch: name = "Flinch"
+        case .waryWatch: name = "Wary watch"
+        }
+        return "\(name) (ends \(formatCountdown(target: active.endsAt, now: now)))"
+    }
+
+    /// "cursorDart 64%" — the most-fatigued stimulus, or an em dash for a fresh store.
+    static func formatHabituationPeak(_ habituation: Habituation) -> String {
+        guard let strongest = habituation.strongest() else { return "\u{2014}" }
+        return "\(strongest.key) \(formatPercent(strongest.level))"
     }
 
     static func yesNo(_ value: Bool) -> String {

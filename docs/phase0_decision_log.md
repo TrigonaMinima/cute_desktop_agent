@@ -247,6 +247,48 @@ never double-decayed.
 
 ---
 
+## D16. Brain tick order, motor policy, and the emotion ladder
+
+**Decision**: `EmergentBrain` is a peer of the classic `StateMachine` with the
+same seams (`makeInitialState` / `tick` / `beginDrag` / `updateDrag` / `endDrag`),
+so the shell swap in the next task is a one-line substitution. Per display frame,
+in order: attention-zone belief → drag short-circuit → reflex arc → cognition
+(8 Hz gated) → steering + fixed-step physics + hard screen clamp → gaze + the
+once-per-tick habituation recovery → blink → body write-back.
+
+Load-bearing choices inside that order:
+
+- **Reflex consequences apply on the frame the event fires** (gaze snap to the
+  source, startle arousal impulse, `rearbitrateAt = event.endsAt`) — they never
+  wait for the next cognition slice. Arbitration is skipped while a startle or
+  flinch holds the body; wary watch only takes the eyes, so scoring continues.
+- **Forced re-arbitration** (bypasses the 2500 ms commitment): a due
+  `rearbitrateAt` (reflex just ended, drag just dropped, target just reached),
+  zone overlap while not yielding, or yield with no overlap left. The last one
+  means yield releases the moment the body clears the caret zone — escape just
+  far enough, then re-score, rather than completing a stale trip.
+- **Motor policy per behavior**: idle/rest apply no force (the edge cushion
+  still does); wander is the heading-noise force with a fresh random heading
+  drawn per commit; inspect arrives at a stand-off point 140 px short of the
+  gaze target (leaning in to look, not sitting on the thing); yield arrives at
+  the existing `escapePoint` at 220 px/s vs the 120 px/s × tempo cruise. Reflex
+  flight (340 px/s) preempts all of them. Arrival within 12 px clears the
+  target and forces a re-score.
+- **Rest score slack**: rest = `max(0, (1 − energy) − 0.3)`. Without the slack,
+  calm's 0.5 baseline energy made rest (0.5) permanently outbid idle (0.25) — a
+  pet that naps by default. Only a genuine energy deficit now wins.
+- **Emotion ladder** (existing faces only, highest priority first): dragging →
+  blush; active startle/flinch → surprised, wary watch → curious; yield →
+  annoyed; inspect → curious; rest-and-settled → sleepy; else neutral.
+- **Display mapping** for the classic status surfaces: inspect renders as
+  `wander` (purposeful motion), yield as `flee`; the new Mind section on both
+  menus carries the real behavior plus situation, power tier, all six drives,
+  gaze, active reflex, and the habituation peak.
+- **Blink carries over** from the classic path unchanged; quirks do not —
+  drive-flavored idling is meant to replace them (deferral below).
+
+---
+
 ## Deferred follow-ups discovered during the build
 
 - Authored yawn/stretch/wary-watch set-piece faces (need user-confirmed
@@ -255,3 +297,9 @@ never double-decayed.
 - A real is-media-playing cheap signal to replace the D6 fullscreen proxy.
 - Phase 1: telemetry log, deterministic record/replay, persistence store
   scaffolding.
+- A `pettedOrPlayed` impulse producer (hover-dwell "petting" detection) — the
+  drive impulse exists but nothing fires it on the emergent path yet.
+- Quirk micro-expressions on the emergent path, if drive-flavored idling turns
+  out too flat without them.
+- Drag-release fling: `endDrag` currently lands with zero velocity; carrying
+  the hand's velocity into the physics body would read more alive.

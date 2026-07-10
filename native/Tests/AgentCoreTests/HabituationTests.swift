@@ -8,6 +8,18 @@ import Testing
 // (calm tires of stimuli quickly, gremlin stays engaged).
 struct HabituationTests {
 
+    @Test func strongest_emptyStore_isNil() {
+        let habituation = Habituation()
+        #expect(habituation.strongest() == nil)
+    }
+
+    @Test func strongest_returnsTheMostHabituatedKey() {
+        var habituation = Habituation()
+        habituation.expose("cursorDart", dt: 20, rate: 1)
+        habituation.expose("cursor", dt: 2, rate: 1)
+        #expect(habituation.strongest()?.key == "cursorDart")
+    }
+
     @Test func level_unseenKey_isZero() {
         let habituation = Habituation()
         #expect(habituation.level(for: "cursor") == 0)

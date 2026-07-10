@@ -59,6 +59,13 @@ struct BehaviorScoringTests {
 
     // MARK: Drive-led dominance
 
+    @Test func scores_calmBaselineDrives_idleBeatsRest() {
+        // Calm's resting energy is 0.5; the rest score's slack keeps a merely
+        // average-energy agent from defaulting to sleep over presence.
+        let table = scoreTable(drives: drives(energy: 0.5, arousal: 0.25, boredom: 0.2))
+        #expect(table[.idle]! > table[.rest]!)
+    }
+
     @Test func scores_lowEnergy_restDominates() {
         let table = scoreTable(drives: drives(energy: 0.1, arousal: 0.25))
         #expect(topKind(of: table) == .rest)
