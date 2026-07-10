@@ -41,4 +41,16 @@ public enum MindConstants {
     public static let boredomCuriosityThreshold: Double = 0.5
     /// Curiosity lift per second per unit of above-threshold boredom.
     public static let boredomCuriosityCouplingPerSecond: Double = 0.02
+
+    // MARK: Situation model (decision log D6)
+
+    /// How long (ms) a raw situation candidate must hold continuously before the
+    /// committed mode switches — the situation model's own hysteresis.
+    public static let situationSwitchDwellMs: Double = 2000
+    /// Seconds without input activity before a quiet desktop reads as idle/away.
+    public static let idleAwayAfterSeconds: Double = 60
+    /// Seconds of hands-off stillness before a fullscreen surface reads as media.
+    public static let mediaStillnessSeconds: Double = 3
+    /// Fraction of its nearest screen a window must cover to count as fullscreen-ish.
+    public static let fullscreenCoverageRatio: Double = 0.9
 }
