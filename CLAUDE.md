@@ -37,20 +37,35 @@ invocation, e.g. `swift test --package-path native --filter StateMachineTransiti
 Two-target Swift package plus a throwaway spike, defined in `native/Package.swift`:
 
 - **`Sources/AgentCore`** — Foundation-only pure logic: math (`Math/Geometry.swift`,
-  `Math/TargetPicking.swift`), the behavior `StateMachine`, and the `AgentState` model
+  `Math/TargetPicking.swift`), the two brains (below), and the `AgentState` model
   (`State/AgentState.swift`). No AppKit import, fully unit-testable headless via
-  `swift test`. This is a **mechanical port** of `electron-poc/renderer/blob.js`
-  (lines ~90-431) — when behavior looks odd, check the doc comments in
-  `Behavior/StateMachine.swift` explaining the JS source parity, rather than
-  "fixing" it to look more idiomatic.
+  `swift test`. Two brains conform to the `AgentBrain` seam
+  (`Behavior/AgentBrain.swift`) and are selected by `config.json`'s `"brain"` key:
+  - `Behavior/StateMachine.swift` — the **classic** brain, a **mechanical port** of
+    `electron-poc/renderer/blob.js` (lines ~90-431). When its behavior looks odd,
+    check the doc comments explaining the JS source parity rather than "fixing" it
+    to look more idiomatic. Rollback switch: `"brain": "classic"`.
+  - `Mind/` — the **emergent** brain (the default): `EmergentBrain.swift` composes
+    layered systems — drives (`Drives.swift`, `DriveDynamics.swift`,
+    `Temperament.swift`), situation model (`SituationModel.swift`), fixed-timestep
+    physics + steering (`Physics/PhysicsBody.swift`, `Physics/Steering.swift`),
+    gaze/attention (`GazeSystem.swift`, `Habituation.swift`), reflex arc
+    (`ReflexArc.swift`), behavior arbitration (`BehaviorScoring.swift`), and the
+    doze/sleep power ladder (`PowerPolicy.swift`) — all tuned via
+    `MindConstants.swift`, with the belief state in `MindState.swift`
+    (`state.mind`, nil on the classic path). Design rationale lives in
+    `docs/emergent_behavior_design.md`; every build decision is logged in
+    `docs/phase0_decision_log.md` (D1-D19).
 - **`Sources/AgentApp`** — the AppKit shell: overlay window (`Shell/OverlayPanel.swift`),
   menu-bar status item (`Shell/StatusItemController.swift`), the shared live-refreshing
   status menu (`Shell/LiveMenuController.swift`, `Shell/StatusMenuBuilder.swift`) both the
-  status item and the avatar's right-click menu build on, the app delegate
-  (`Shell/AppDelegate.swift`) that wires everything together, cursor/frontmost-app
-  polling (`Perception/Perception.swift`), and Core Animation avatar rendering
-  (`Render/AvatarView.swift`, `Render/Avatar.swift`, `Render/Avatars/SlimeAvatar.swift`).
-  Imports `AgentCore`.
+  status item and the avatar's right-click menu build on, the temperament preset submenu
+  (`Shell/TemperamentMenuController.swift`, persisted under the `temperamentPreset`
+  UserDefaults key), the sleep-tier wake monitors (`Shell/PowerController.swift`), the
+  app delegate (`Shell/AppDelegate.swift`) that wires everything together,
+  cursor/frontmost-app polling (`Perception/Perception.swift`), and Core Animation
+  avatar rendering (`Render/AvatarView.swift`, `Render/Avatar.swift`,
+  `Render/Avatars/SlimeAvatar.swift`). Imports `AgentCore`.
 - **`Sources/Spike`** — throwaway Phase 0 gate code proving the overlay window
   behaviors (float over fullscreen, click-through, no activation stealing,
   `CADisplayLink`) work without Xcode.app. Not shipped; rerun with
@@ -61,24 +76,32 @@ Two-target Swift package plus a throwaway spike, defined in `native/Package.swif
 ### Data flow / state ownership
 
 `AgentState` (`world` = perceived environment, `body` = the agent's own
-position/mode/emotion, `memory` = timers/cooldowns) is the single source of truth,
-designed to double as a future LLM/agent context object (see its doc comment). Strict
+position/mode/emotion, `memory` = timers/cooldowns, `mind` = the emergent brain's
+belief state, nil on the classic path) is the single source of truth, designed to
+double as a future LLM/agent context object (see its doc comment). Strict
 single-writer discipline:
 
-- **`StateMachine`** (in `AgentCore`) is the *sole* writer of `state.body` and
-  `state.memory`, driven once per frame by `tick(state:dt:)`. RNG and time are injected
-  (`RandomProvider`, `Clock`) so behavior is deterministic under test — production wires
-  `SystemRandom`/`SystemClock`, tests use fakes (see `Tests/AgentCoreTests/TestFixtures.swift`).
+- **The active brain** (`StateMachine` or `EmergentBrain`, held by the shell as one
+  `AgentBrain` existential) is the *sole* writer of `state.body` and `state.memory` —
+  and, on the emergent path, `state.mind` — driven once per frame by `tick(state:dt:)`.
+  RNG and time are injected (`RandomProvider`, `Clock`; the emergent brain also takes an
+  `hourOfDay` reader for its circadian baselines) so behavior is deterministic under
+  test — production wires `SystemRandom`/`SystemClock`, tests use fakes (see
+  `Tests/AgentCoreTests/TestFixtures.swift`).
 - **`Perception`** (in `AgentApp`) writes `state.world` once per frame (cursor position,
   frontmost app), polled rather than event-driven.
 - **`AvatarView`** and everything else only *reads* a frozen `AgentState` copy per frame
   to render — never mutates it.
 - Drag is the one interaction that bypasses the normal tick flow: `AppDelegate` calls
-  `stateMachine.beginDrag`/`updateDrag`/`endDrag` directly from mouse callbacks.
+  `brain.beginDrag`/`updateDrag`/`endDrag` directly from mouse callbacks. Temperament
+  switching (`EmergentBrain.adoptTemperament`) works the same way, from the menu action.
 
 Frame driving: `FrameClock` (backed by `CADisplayLink`) calls into `AppDelegate`'s
-closure once per frame, which does perception poll → `stateMachine.tick` → `avatarView.render`
-→ hit-test update → live-menu refresh, in that order.
+closure once per frame, which does perception poll → `brain.tick` → `avatarView.render`
+→ hit-test update → live-menu refresh → sleep check, in that order. When the emergent
+brain reports `mind.power == .sleeping` (no user input for 5 minutes), the shell stops
+the `FrameClock` entirely and `PowerController`'s event monitors restart it on the first
+sign of the user (see decision log D18).
 
 ### Live status menus
 
@@ -99,10 +122,14 @@ loop. Because both surfaces are built from the identical builder/controller pair
   depends on. Adding a new avatar = new conformer under `Render/Avatars/` + a case in
   `AppConfig.makeAvatar()` (`Config/AppConfig.swift`) — nothing else in the render layer
   changes. Only `SlimeAvatar` exists today.
-- **Branding**: display name, bundle identifier, status-item glyph, and avatar choice
-  live in `native/config.json`, never as literals in code — `AppConfig` decodes it at
-  runtime from the app bundle's `Resources/`, and `build-app.sh` reads the same file at
-  bundle-assembly time for `Info.plist` substitution.
+- **Brains**: `AgentBrain` protocol (`Behavior/AgentBrain.swift`) is the only interface
+  the shell drives — swapping brains is pure configuration (`config.json`'s `"brain"`
+  key: `emergent` default, `classic` rollback), no per-brain branches in the frame
+  driver or drag wiring.
+- **Branding**: display name, bundle identifier, status-item glyph, avatar choice, and
+  brain choice live in `native/config.json`, never as literals in code — `AppConfig`
+  decodes it at runtime from the app bundle's `Resources/`, and `build-app.sh` reads the
+  same file at bundle-assembly time for `Info.plist` substitution.
 
 ## Toolchain quirks (native/)
 
