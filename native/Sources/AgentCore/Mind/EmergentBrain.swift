@@ -17,10 +17,9 @@ public final class EmergentBrain {
     private let rng: RandomProvider
     private let clock: Clock
     private let hourOfDay: () -> Double
-    /// The temperament the `AgentBrain`-seam boot uses — the shell passes the persisted
+    /// The temperament `makeInitialState` boots with — the shell passes the persisted
     /// preset here, since the protocol's `makeInitialState` has no temperament parameter.
-    /// Internal, not private: the seam conformance in `AgentBrain.swift` reads it.
-    let bootTemperament: Temperament
+    private let bootTemperament: Temperament
 
     public init(
         rng: RandomProvider, clock: Clock, hourOfDay: @escaping () -> Double,
@@ -34,37 +33,32 @@ public final class EmergentBrain {
 
     // MARK: - Boot
 
-    /// Boots at the primary display's center, drives exactly at the temperament's
-    /// effective baselines (the doc's "waking up rested" persistence boundary). The
-    /// classic memory timers are seeded too — blink keeps running on this path; quirks
-    /// don't (drive-flavored idling replaces them), so their timers stay inert at 0.
+    /// Boots at the primary display's center with the configured `bootTemperament`,
+    /// drives exactly at that temperament's effective baselines (the doc's "waking up
+    /// rested" persistence boundary). The classic memory timers are seeded too — blink
+    /// keeps running on this path; quirks don't (drive-flavored idling replaces them),
+    /// so their timers stay inert at 0.
     public func makeInitialState(
-        screens: [ScreenInfo], avatarSize: Size, temperament: Temperament, now: Double
+        screens: [ScreenInfo], avatarSize: Size, now: Double
     ) -> AgentState {
-        let primary = screens[0].frame
-        let center = Point(
-            x: primary.origin.x + primary.size.width / 2,
-            y: primary.origin.y + primary.size.height / 2
-        )
+        let bootCenter = center(of: screens[0].frame)
         return AgentState(
-            world: AgentWorld(screens: screens, cursor: center),
+            world: AgentWorld(screens: screens, cursor: bootCenter),
             body: AgentBody(
-                position: center, mode: .idle, target: center, moving: false,
+                position: bootCenter, mode: .idle, target: bootCenter, moving: false,
                 emotion: .neutral, dragging: false, dragOffset: Vector(dx: 0, dy: 0),
                 size: avatarSize
             ),
             memory: AgentMemory(
                 modeEndsAt: 0, happyUntil: 0, happyResumeMode: .idle,
-                nextBlinkAt: now + lerp(
-                    Constants.initialBlinkDelayMsRange.min,
-                    Constants.initialBlinkDelayMsRange.max, rng.nextUnit()
-                ),
+                nextBlinkAt: now + randomRange(Constants.initialBlinkDelayMsRange),
                 blinking: false, blinkEndsAt: 0,
                 quirkEmotion: nil, quirkUntil: 0, nextQuirkAt: 0,
                 proximityUntil: 0, proximityCooldownUntil: 0, yieldCooldownUntil: 0
             ),
             mind: MindState(
-                temperament: temperament, position: center, hourOfDay: hourOfDay(), now: now
+                temperament: bootTemperament, position: bootCenter,
+                hourOfDay: hourOfDay(), now: now
             )
         )
     }
@@ -73,6 +67,10 @@ public final class EmergentBrain {
 
     public func tick(state: inout AgentState, dt: Double) {
         guard var mind = state.mind else { return }
+        // Take, don't copy: with `state.mind` still holding the original, `mind`'s
+        // copy-on-write internals (the habituation dictionary) would clone on every
+        // frame's first mutation. The defer write-back restores it on every path out.
+        state.mind = nil
         defer { state.mind = mind }
         let now = clock.now()
 
@@ -223,14 +221,12 @@ public final class EmergentBrain {
     /// in to look, not sitting on the thing. Returns nil when already that close.
     private func inspectTarget(state: AgentState, mind: MindState) -> Point? {
         let point = mind.gaze.targetPoint
-        let center = bodyCenter(of: mind, size: state.body.size)
-        let dx = center.x - point.x
-        let dy = center.y - point.y
-        let gap = (dx * dx + dy * dy).squareRoot()
+        let bodyCenter = bodyCenter(of: mind, size: state.body.size)
+        let gap = distance(point, bodyCenter)
         guard gap > MindConstants.inspectStandOffPx else { return nil }
         let standCenter = Point(
-            x: point.x + dx / gap * MindConstants.inspectStandOffPx,
-            y: point.y + dy / gap * MindConstants.inspectStandOffPx
+            x: point.x + (bodyCenter.x - point.x) / gap * MindConstants.inspectStandOffPx,
+            y: point.y + (bodyCenter.y - point.y) / gap * MindConstants.inspectStandOffPx
         )
         let topLeft = Point(
             x: standCenter.x - state.body.size.width / 2,
@@ -306,9 +302,7 @@ public final class EmergentBrain {
         let size = state.body.size
         // The eyes lead the body only when it moves with purpose — a destination, not
         // a wander heading. Gaze points are world points, so re-center the target.
-        let locomotion = mind.behaviorTarget.map {
-            Point(x: $0.x + size.width / 2, y: $0.y + size.height / 2)
-        }
+        let locomotion = mind.behaviorTarget.map { center(of: Rect(origin: $0, size: size)) }
         let onsetBefore = mind.gaze.lastOnsetAt
         let context = GazeContext(
             world: state.world, bodyCenter: bodyCenter(of: mind, size: size),
@@ -332,11 +326,14 @@ public final class EmergentBrain {
         if !state.memory.blinking, now >= state.memory.nextBlinkAt {
             state.memory.blinking = true
             state.memory.blinkEndsAt = now + Constants.blinkActiveMs
-            state.memory.nextBlinkAt = now + lerp(
-                Constants.blinkIntervalMsRange.min,
-                Constants.blinkIntervalMsRange.max, rng.nextUnit()
-            )
+            state.memory.nextBlinkAt = now + randomRange(Constants.blinkIntervalMsRange)
         }
+    }
+
+    /// One rng draw uniformly inside `range` — same helper the classic path keeps
+    /// privately; re-declared here because `StateMachine` is a frozen mechanical port.
+    private func randomRange(_ range: Constants.MsRange) -> Double {
+        lerp(range.min, range.max, rng.nextUnit())
     }
 
     // MARK: - Body write-back (the render seam)
@@ -378,10 +375,7 @@ public final class EmergentBrain {
     }
 
     private func bodyCenter(of mind: MindState, size: Size) -> Point {
-        Point(
-            x: mind.physics.position.x + size.width / 2,
-            y: mind.physics.position.y + size.height / 2
-        )
+        center(of: Rect(origin: mind.physics.position, size: size))
     }
 
     // MARK: - Temperament switching (decision log D10)
@@ -420,6 +414,7 @@ public final class EmergentBrain {
     public func endDrag(state: inout AgentState, now: Double) {
         state.body.dragging = false
         guard var mind = state.mind else { return }
+        state.mind = nil // take pattern — see tick()
         DriveDynamics.apply(.droppedGently, to: &mind.drives, temperament: mind.temperament)
         // Being put down is new information — re-score rather than resuming whatever
         // was committed before the hand closed.

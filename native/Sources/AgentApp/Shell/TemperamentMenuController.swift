@@ -30,7 +30,7 @@ public final class TemperamentMenuController: NSObject {
                 title: preset.displayName, action: #selector(select(_:)), keyEquivalent: ""
             )
             row.target = self
-            row.representedObject = preset.rawValue
+            row.representedObject = preset
             row.state = preset == selected ? .on : .off
             submenu.addItem(row)
         }
@@ -39,8 +39,7 @@ public final class TemperamentMenuController: NSObject {
     }
 
     @objc private func select(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let preset = TemperamentPreset(rawValue: raw) else { return }
+        guard let preset = sender.representedObject as? TemperamentPreset else { return }
         onSelect(preset)
     }
 }

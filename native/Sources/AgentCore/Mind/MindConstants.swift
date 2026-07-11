@@ -151,6 +151,10 @@ public enum MindConstants {
     /// Energy deficit subtracted from the rest score before it competes: rest only
     /// outbids idle once energy has genuinely sagged, not at an average baseline.
     public static let restEnergySlack: Double = 0.3
+    /// Liveliness floor for a temperament vector missing an entry for the current
+    /// situation mode — unreachable with the shipped presets (all define all four
+    /// modes); see `Temperament.livelinessFloor(for:)`.
+    public static let livelinessFloorFallback: Double = 0.2
 
     // MARK: Brain motor policy (behavior → desired speed / target geometry)
 

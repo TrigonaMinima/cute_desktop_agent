@@ -9,6 +9,12 @@ public struct BodyMotion: Equatable {
     public var scaleX: Double
     public var scaleY: Double
     public var bobY: Double
+    /// Unit-clamped look direction for pupil deflection (see `GazeSystem.direction`).
+    /// Zero when no mind is driving — the classic brain's eyes stay centered, exactly
+    /// as before the emergent path landed. Carried here rather than read from
+    /// `state.mind` in the render layer, so `AvatarView` stays brain-agnostic and the
+    /// value is computed once per frame, not once per panel.
+    public var gazeDirection: Vector = Vector(dx: 0, dy: 0)
 }
 
 /// Branch priority mirrors blob.js exactly: dragging > happy mode > moving > idle
@@ -42,5 +48,9 @@ public func computeBodyMotion(state: AgentState, now: Double) -> BodyMotion {
         scaleX = 1 - wobble * Constants.idleWobbleScaleX
     }
 
-    return BodyMotion(scaleX: scaleX, scaleY: scaleY, bobY: bobY)
+    let gazeDirection = state.mind?.gaze
+        .direction(from: center(of: Rect(origin: state.body.position, size: state.body.size)))
+        ?? Vector(dx: 0, dy: 0)
+
+    return BodyMotion(scaleX: scaleX, scaleY: scaleY, bobY: bobY, gazeDirection: gazeDirection)
 }

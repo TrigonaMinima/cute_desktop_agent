@@ -40,7 +40,7 @@ struct DrivesTests {
     // MARK: Decay toward baseline (homeostasis, not accumulation)
 
     @Test func tick_displacedArousal_relaxesTowardBaseline() {
-        var drives = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var drives = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         drives.arousal = 1.0
         let baseline = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12).arousal
         run(&drives, temperament: .calm, hourOfDay: 12, seconds: 120)
@@ -50,7 +50,7 @@ struct DrivesTests {
     @Test func tick_dozeBaselineScale_pullsEnergyAndArousalBelowTheAwakeBaselines() {
         // The doze tier's "drive baselines biased down" (decision log D11): energy and
         // arousal relax toward scaled-down targets; the other four drives are untouched.
-        var drives = Drives.atBaselines(of: .calm, hourOfDay: 15)
+        var drives = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 15)
         let awake = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 15)
         for _ in 0..<2400 {
             DriveDynamics.tick(&drives, temperament: .calm, hourOfDay: 15, dt: 1, baselineScale: 0.6)
@@ -61,7 +61,7 @@ struct DrivesTests {
     }
 
     @Test func tick_zeroDt_changesNothing() {
-        var drives = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var drives = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         drives.arousal = 0.9
         let before = drives
         DriveDynamics.tick(&drives, temperament: .calm, hourOfDay: 12, dt: 0)
@@ -69,7 +69,7 @@ struct DrivesTests {
     }
 
     @Test func tick_isDeterministic() {
-        var a = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var a = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         var b = a
         run(&a, temperament: .calm, hourOfDay: 12, seconds: 30)
         run(&b, temperament: .calm, hourOfDay: 12, seconds: 30)
@@ -79,7 +79,7 @@ struct DrivesTests {
     // MARK: Bounded ranges
 
     @Test func applyImpulse_neverLeavesUnitRange() {
-        var drives = Drives.atBaselines(of: .gremlin, hourOfDay: 12)
+        var drives = DriveDynamics.effectiveBaselines(temperament: .gremlin, hourOfDay: 12)
         for _ in 0..<20 {
             DriveDynamics.apply(.startle(intensity: 1.0), to: &drives, temperament: .gremlin)
         }
@@ -95,14 +95,14 @@ struct DrivesTests {
     // MARK: Events are impulses, not level sets
 
     @Test func startle_spikesArousal() {
-        var drives = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var drives = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         let before = drives.arousal
         DriveDynamics.apply(.startle(intensity: 1.0), to: &drives, temperament: .calm)
         #expect(drives.arousal > before)
     }
 
     @Test func startle_decaysHomeAfterRest() {
-        var drives = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var drives = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         let baseline = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12).arousal
         DriveDynamics.apply(.startle(intensity: 1.0), to: &drives, temperament: .calm)
         run(&drives, temperament: .calm, hourOfDay: 12, seconds: 180)
@@ -110,7 +110,7 @@ struct DrivesTests {
     }
 
     @Test func startle_intensityScalesWithTemperamentReflexGain() {
-        var calm = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var calm = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         var gremlin = calm
         DriveDynamics.apply(.startle(intensity: 0.5), to: &calm, temperament: .calm)
         DriveDynamics.apply(.startle(intensity: 0.5), to: &gremlin, temperament: .gremlin)
@@ -120,7 +120,7 @@ struct DrivesTests {
     // MARK: Boredom dynamics + one-directional coupling
 
     @Test func boredom_growsWhenArousalIsLow() {
-        var drives = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var drives = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         drives.arousal = 0.05
         let before = drives.boredom
         run(&drives, temperament: .calm, hourOfDay: 12, seconds: 180)
@@ -128,7 +128,7 @@ struct DrivesTests {
     }
 
     @Test func boredom_growsSlowerWhenArousalIsHigh() {
-        var lowArousal = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var lowArousal = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         var highArousal = lowArousal
         lowArousal.arousal = 0.0
         highArousal.arousal = 1.0
@@ -140,7 +140,7 @@ struct DrivesTests {
     }
 
     @Test func highBoredom_liftsCuriosity() {
-        var bored = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var bored = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         var content = bored
         bored.boredom = 1.0
         content.boredom = 0.0
@@ -150,7 +150,7 @@ struct DrivesTests {
     }
 
     @Test func coupling_isOneDirectional_curiosityDoesNotFeedBoredom() {
-        var curious = Drives.atBaselines(of: .calm, hourOfDay: 12)
+        var curious = DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 12)
         var incurious = curious
         curious.curiosity = 1.0
         incurious.curiosity = 0.0

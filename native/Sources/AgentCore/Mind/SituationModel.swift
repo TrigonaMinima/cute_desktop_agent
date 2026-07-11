@@ -91,11 +91,7 @@ public struct SituationModel: Codable, Equatable {
     /// hangs a few pixels over (or a menu-bar-inset visibleFrame mismatch) still counts.
     static func isEffectivelyFullscreen(window: WindowInfo?, screens: [ScreenInfo]) -> Bool {
         guard let window else { return false }
-        let center = Point(
-            x: window.frame.origin.x + window.frame.size.width / 2,
-            y: window.frame.origin.y + window.frame.size.height / 2
-        )
-        let screen = nearestScreen(to: center, screens: screens).frame
+        let screen = nearestScreen(to: center(of: window.frame), screens: screens).frame
         let screenArea = screen.size.width * screen.size.height
         guard screenArea > 0 else { return false }
         return intersectionArea(window.frame, screen) / screenArea

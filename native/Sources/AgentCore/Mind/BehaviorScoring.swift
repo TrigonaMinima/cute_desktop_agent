@@ -3,7 +3,7 @@ import Foundation
 /// The behaviors the arbiter can hand the body to (design doc layer 5). Reflexes are
 /// not in this list on purpose — they preempt whoever holds the body and are never
 /// scored, so arbiter hysteresis can never gate them.
-public enum BehaviorKind: String, Codable, CaseIterable, Equatable {
+public enum BehaviorKind: String, Codable, Equatable {
     /// Present but unhurried: micro-motion only, the default posture.
     case idle
     /// Settle and recover — energy's behavior.
@@ -29,8 +29,7 @@ public enum BehaviorScoring {
     public static func spontaneity(
         situation: SituationMode, arousal: Double, temperament: Temperament
     ) -> Double {
-        let floor = temperament.livelinessFloors[situation] ?? 0.2
-        return max(floor, deference(situation) * arousal)
+        return max(temperament.livelinessFloor(for: situation), deference(situation) * arousal)
     }
 
     /// How much the situation asks the agent to hold back — multiplies spontaneous

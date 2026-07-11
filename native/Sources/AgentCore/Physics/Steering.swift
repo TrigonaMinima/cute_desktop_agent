@@ -8,36 +8,22 @@ import Foundation
 /// log D12). Positions are avatar top-left in web space, matching `PhysicsBody`.
 public enum Steering {
 
-    /// Full speed straight at `target`. Zero at the target itself — seek has no notion
-    /// of stopping; use `arrive` when the approach should end in a settle.
-    public static func seek(
-        position: Point, velocity: Vector, target: Point, maxSpeed: Double
-    ) -> Vector {
-        let dx = target.x - position.x
-        let dy = target.y - position.y
-        let distance = (dx * dx + dy * dy).squareRoot()
-        guard distance > 0 else { return Vector(dx: 0, dy: 0) }
-        return steer(
-            desired: Vector(dx: dx / distance * maxSpeed, dy: dy / distance * maxSpeed),
-            current: velocity
-        )
-    }
-
-    /// Like `seek`, but desired speed ramps down linearly inside
+    /// Move toward `target` at full speed, ramping desired speed down linearly inside
     /// `MindConstants.arriveSlowRadius` — at the target the desired velocity is zero, so
     /// any leftover momentum produces a braking force rather than an orbit.
     public static func arrive(
         position: Point, velocity: Vector, target: Point, maxSpeed: Double
     ) -> Vector {
-        let dx = target.x - position.x
-        let dy = target.y - position.y
-        let distance = (dx * dx + dy * dy).squareRoot()
-        guard distance > 0 else {
+        let gap = distance(position, target)
+        guard gap > 0 else {
             return steer(desired: Vector(dx: 0, dy: 0), current: velocity)
         }
-        let speed = maxSpeed * min(1, distance / MindConstants.arriveSlowRadius)
+        let speed = maxSpeed * min(1, gap / MindConstants.arriveSlowRadius)
         return steer(
-            desired: Vector(dx: dx / distance * speed, dy: dy / distance * speed),
+            desired: Vector(
+                dx: (target.x - position.x) / gap * speed,
+                dy: (target.y - position.y) / gap * speed
+            ),
             current: velocity
         )
     }
@@ -48,14 +34,15 @@ public enum Steering {
     public static func flee(
         position: Point, velocity: Vector, threat: Point, maxSpeed: Double
     ) -> Vector {
-        let dx = position.x - threat.x
-        let dy = position.y - threat.y
-        let distance = (dx * dx + dy * dy).squareRoot()
-        guard distance > 0 else {
+        let gap = distance(threat, position)
+        guard gap > 0 else {
             return steer(desired: Vector(dx: 0, dy: -maxSpeed), current: velocity)
         }
         return steer(
-            desired: Vector(dx: dx / distance * maxSpeed, dy: dy / distance * maxSpeed),
+            desired: Vector(
+                dx: (position.x - threat.x) / gap * maxSpeed,
+                dy: (position.y - threat.y) / gap * maxSpeed
+            ),
             current: velocity
         )
     }

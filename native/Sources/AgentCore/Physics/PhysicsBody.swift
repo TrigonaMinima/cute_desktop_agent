@@ -31,7 +31,7 @@ public struct PhysicsBody: Codable, Equatable {
 /// of how the display slices time. The applied force is held constant across one
 /// frame's substeps; it changes at most once per display frame anyway.
 public struct FixedStepper: Codable, Equatable {
-    public private(set) var accumulator: Double = 0
+    private var accumulator: Double = 0
 
     public init() {}
 

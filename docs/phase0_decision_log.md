@@ -385,6 +385,52 @@ status surfaces, with these mechanics:
 
 ---
 
+## D20. Simplify pass: applied cleanups and deliberate skips
+
+**Decision**: before merging, a four-angle review (reuse / simplification /
+efficiency / altitude) ran over the whole branch diff; its findings were
+deduped and applied as one cleanup commit. The notable applied changes:
+
+- **`center(of:)` in `Geometry.swift`** is now the single center-of-rect
+  definition; gaze, situation, brain, and body-motion call sites stopped
+  re-deriving `origin + size/2` inline.
+- **`Steering.seek` deleted** — production only ever used `arrive`/`flee`;
+  the two arrive tests that used seek as an oracle now assert against
+  `maxSpeed × steeringGain` directly.
+- **Gaze window identity is a `WindowIdentity` struct** (app/owner/title)
+  compared field-wise, replacing the per-frame `"\(app)|\(owner)|\(title)"`
+  string key allocation.
+- **Take pattern in `EmergentBrain.tick`/`endDrag`**: `state.mind` is taken
+  (set nil, restored via defer) so the habituation dictionary's copy-on-write
+  storage mutates in place instead of cloning every frame.
+- **Gaze eye deflection moved into `BodyMotion.gazeDirection`** — computed
+  once per frame in AgentCore; `AvatarView` no longer reads `state.mind`.
+- **Shell/brain seam hardened**: `AgentBrain` gained `wantsRuntimeSleep`
+  (default false) and a `TemperamentControlling` capability protocol, so the
+  shell keys sleep and the temperament menu off protocols instead of
+  downcasting to `EmergentBrain`. Future brain capabilities follow the same
+  pattern: a capability protocol, not a downcast.
+- Smaller: `Drives.atBaselines` folded into `DriveDynamics.effectiveBaselines`;
+  the liveliness-floor fallback (0.2) named in `MindConstants`;
+  `TemperamentMenuController` carries the preset as `representedObject`
+  instead of round-tripping through raw strings; unused `CaseIterable`
+  conformances and `ReflexEvent.firedAt` dropped.
+
+**Deliberate skips** (reviewer findings judged behavior-changing or premature):
+
+- `DriveImpulse.pettedOrPlayed` kept despite no producer — it's a design-doc
+  impulse whose producer is a listed deferred follow-up, not dead code.
+- `updateDrag`'s physics sync kept — removing it would snap the body back one
+  frame on drag-end between ticks; the "tick covers it" claim misses the
+  drag-end handoff.
+- No `MenuExtras` generalization — only two menu extras exist (launch-at-login,
+  temperament); rule of three not met.
+- Reflex `snap(to:now:)` forging `.onset` gaze state (sharing habituation
+  key/decay with real window onsets) left as-is — changing it alters reflex
+  habituation behavior; recorded below as a deferred follow-up.
+
+---
+
 ## Deferred follow-ups discovered during the build
 
 - Authored yawn/stretch/wary-watch set-piece faces (need user-confirmed
@@ -399,3 +445,6 @@ status surfaces, with these mechanics:
   out too flat without them.
 - Drag-release fling: `endDrag` currently lands with zero velocity; carrying
   the hand's velocity into the physics body would read more alive.
+- Reflex `snap(to:now:)` forges an `.onset` gaze state and shares the
+  habituation key/decay with real window onsets (see D20 skips) — worth a
+  dedicated reflex-gaze channel if reflex glances start habituating oddly.

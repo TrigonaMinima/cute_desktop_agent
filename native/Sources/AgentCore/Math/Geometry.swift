@@ -21,6 +21,12 @@ public func distance(_ a: Point, _ b: Point) -> Double {
     distance(ax: a.x, ay: a.y, bx: b.x, by: b.y)
 }
 
+/// Center of a rect — the single definition of `origin + size/2`, so gaze, situation,
+/// and body-center math never re-derive it inline.
+public func center(of rect: Rect) -> Point {
+    Point(x: rect.origin.x + rect.size.width / 2, y: rect.origin.y + rect.size.height / 2)
+}
+
 /// Picks a key from `weights` proportionally to its weight, given `rngValue` in [0, 1].
 ///
 /// `weights` is an ordered array of (key, weight) pairs rather than a Dictionary — this

@@ -84,7 +84,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         state = brain.makeInitialState(
             screens: layout.screens, avatarSize: config.makeAvatar().intrinsicSize, now: clock.now()
         )
-        let temperamentMenu = makeTemperamentMenu(kind: config.brainKind)
+        let temperamentMenu = makeTemperamentMenu()
 
         // One provider shared by both menu surfaces (status-item dropdown + avatar
         // right-click) so their live refresh reads the identical snapshot rule by
@@ -191,10 +191,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         case .classic:
             return StateMachine(rng: SystemRandom(), clock: clock)
         case .emergent:
+            let calendar = Calendar.current
             return EmergentBrain(
                 rng: SystemRandom(), clock: clock,
                 hourOfDay: {
-                    let parts = Calendar.current.dateComponents([.hour, .minute], from: Date())
+                    let parts = calendar.dateComponents([.hour, .minute], from: Date())
                     return Double(parts.hour ?? 12) + Double(parts.minute ?? 0) / 60
                 },
                 bootTemperament: storedTemperamentPreset.temperament
@@ -202,11 +203,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The "Temperament" submenu's controller — emergent brain only; the classic brain
-    /// has no temperament, so its menus omit the item entirely. Selection persists the
-    /// preset and tells the live brain to adopt it in place (the drives ease over).
-    private func makeTemperamentMenu(kind: BrainKind) -> TemperamentMenuController? {
-        guard kind == .emergent else { return nil }
+    /// The "Temperament" submenu's controller — only for brains that declare the
+    /// capability (`TemperamentControlling`); others omit the item entirely, and the
+    /// shell never names a concrete brain type. Selection persists the preset and tells
+    /// the live brain to adopt it in place (the drives ease over).
+    private func makeTemperamentMenu() -> TemperamentMenuController? {
+        guard brain is TemperamentControlling else { return nil }
         return TemperamentMenuController(
             current: { [weak self] in
                 self?.state?.mind.flatMap { TemperamentPreset.matching($0.temperament) }
@@ -214,7 +216,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onSelect: { [weak self] preset in
                 guard let self else { return }
                 UserDefaults.standard.set(preset.rawValue, forKey: Self.temperamentPresetKey)
-                (self.brain as? EmergentBrain)?
+                (self.brain as? TemperamentControlling)?
                     .adoptTemperament(preset.temperament, state: &self.state)
             }
         )
@@ -238,12 +240,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         enterSleepIfNeeded()
     }
 
-    /// The sleep tier's shell half (decision log D11): once the brain settles at
-    /// `.sleeping` — always in the rest pose, committed on the same cognition slice —
-    /// stop the frame clock entirely and hand wake duty to `PowerController`. Runs
-    /// last in `tick` so the frame that falls asleep still renders its final pose.
+    /// The sleep tier's shell half (decision log D11): once the brain reports it wants
+    /// runtime sleep — the emergent brain settles into the rest pose first, on the same
+    /// cognition slice — stop the frame clock entirely and hand wake duty to
+    /// `PowerController`. Runs last in `tick` so the frame that falls asleep still
+    /// renders its final pose.
     private func enterSleepIfNeeded() {
-        guard !dormant, state.mind?.power == .sleeping, let runtime else { return }
+        guard !dormant, brain.wantsRuntimeSleep(state: state), let runtime else { return }
         dormant = true
         runtime.frameClock.stop()
         powerController.beginSleep()

@@ -12,7 +12,6 @@ public struct ReflexEvent: Codable, Equatable {
     public var kind: ReflexKind
     public var source: Point
     public var intensity: Double
-    public var firedAt: Double
     public var endsAt: Double
 }
 
@@ -63,7 +62,7 @@ public struct ReflexArc: Codable, Equatable {
         guard let kind = Self.tier(for: intensity) else { return nil }
         let event = ReflexEvent(
             kind: kind, source: world.cursor, intensity: min(1, intensity),
-            firedAt: now, endsAt: now + Self.duration(of: kind)
+            endsAt: now + Self.duration(of: kind)
         )
         active = event
         return event
@@ -88,7 +87,7 @@ public struct ReflexArc: Codable, Equatable {
     static func dartIntensity(world: AgentWorld, bodyCenter: Point) -> Double? {
         let dx = bodyCenter.x - world.cursor.x
         let dy = bodyCenter.y - world.cursor.y
-        let separation = (dx * dx + dy * dy).squareRoot()
+        let separation = distance(world.cursor, bodyCenter)
         guard separation > 0, separation <= MindConstants.reflexDartDistancePx else {
             return nil
         }

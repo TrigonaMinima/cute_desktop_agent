@@ -21,8 +21,7 @@ struct EmergentBrainTests {
     private func makeBooted(clock: ManualClock, rng: RandomProvider = ScriptedRandom([])) -> (EmergentBrain, AgentState) {
         let brain = makeBrain(rng: rng, clock: clock)
         let state = brain.makeInitialState(
-            screens: TestFixtures.screens, avatarSize: avatarSize,
-            temperament: .calm, now: clock.now()
+            screens: TestFixtures.screens, avatarSize: avatarSize, now: clock.now()
         )
         return (brain, state)
     }

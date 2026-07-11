@@ -19,7 +19,7 @@ struct MindStateTests {
 
     @Test func init_drivesStartAtTemperamentBaselinesForTheHour() {
         let mind = MindState(temperament: .calm, position: position, hourOfDay: 15, now: 0)
-        #expect(mind.drives == Drives.atBaselines(of: .calm, hourOfDay: 15))
+        #expect(mind.drives == DriveDynamics.effectiveBaselines(temperament: .calm, hourOfDay: 15))
     }
 
     @Test func init_physicsBodyStartsAtRestAtThePosition() {

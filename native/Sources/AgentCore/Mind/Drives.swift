@@ -26,17 +26,9 @@ public struct Drives: Codable, Equatable {
         self.boredom = boredom
     }
 
-    /// Fresh-launch drives: exactly at the temperament's effective baselines for the
-    /// launch hour — the doc's persistence boundary resets fast dynamical state to
-    /// baseline on every launch ("waking up rested").
-    public static func atBaselines(of temperament: Temperament, hourOfDay: Double) -> Drives {
-        DriveDynamics.effectiveBaselines(temperament: temperament, hourOfDay: hourOfDay)
-    }
-
     /// True when every drive sits inside [0, 1] — the bounded-ranges stability property.
     public var allWithinUnitRange: Bool {
-        [energy, curiosity, sociability, comfort, arousal, boredom]
-            .allSatisfy { $0 >= 0 && $0 <= 1 }
+        Self.allDrivePaths.allSatisfy { (0...1).contains(self[keyPath: $0]) }
     }
 
     /// Key paths to every drive, so leaky decay and clamping iterate one list instead of

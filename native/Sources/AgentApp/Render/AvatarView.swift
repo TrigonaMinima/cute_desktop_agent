@@ -124,7 +124,10 @@ public final class AvatarView: NSView {
         // frame (independent of the emotion-change branch above) since they change far
         // more often than the emotion does.
         if let face = currentFace {
-            let gaze = eyeGazeOffset(state: state)
+            let gaze = CGPoint(
+                x: CGFloat(motion.gazeDirection.dx) * gazeEyeDeflectionPx,
+                y: CGFloat(motion.gazeDirection.dy) * gazeEyeDeflectionPx
+            )
             applyEyeTransform(face.leftEye, blinking: state.memory.blinking, gazeOffset: gaze, to: layers.eyeLeft)
             applyEyeTransform(face.rightEye, blinking: state.memory.blinking, gazeOffset: gaze, to: layers.eyeRight)
         }
@@ -162,25 +165,10 @@ public final class AvatarView: NSView {
 
     /// Max px the eyes shift toward the gaze target at full deflection — the emergent
     /// gaze spine made visible. Subtle on purpose: the eyes glance, they don't roam.
+    /// The direction itself arrives pre-computed in `BodyMotion.gazeDirection` (already
+    /// unit-clamped; web space and this flipped view share the same y-down axis, so no
+    /// conversion) — this view never reads `state.mind`.
     private let gazeEyeDeflectionPx: CGFloat = 3
-
-    /// Where the mind's eyes are pointed, as a view-space offset for the eye layers.
-    /// Zero when no mind is driving (the classic brain), so that path renders exactly
-    /// as before. Gaze direction is already unit-clamped (see `GazeSystem.direction`),
-    /// and web space and this flipped view share the same y-down axis — no conversion.
-    private func eyeGazeOffset(state: AgentState) -> CGPoint {
-        guard let mind = state.mind else { return .zero }
-        let size = avatar.intrinsicSize
-        let center = Point(
-            x: state.body.position.x + size.width / 2,
-            y: state.body.position.y + size.height / 2
-        )
-        let direction = mind.gaze.direction(from: center)
-        return CGPoint(
-            x: CGFloat(direction.dx) * gazeEyeDeflectionPx,
-            y: CGFloat(direction.dy) * gazeEyeDeflectionPx
-        )
-    }
 
     private func applyEyeTransform(
         _ spec: EyeSpec, blinking: Bool, gazeOffset: CGPoint, to layer: CAShapeLayer

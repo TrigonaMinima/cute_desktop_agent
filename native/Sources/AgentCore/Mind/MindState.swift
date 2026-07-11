@@ -40,7 +40,7 @@ public struct MindState: Codable, Equatable {
 
     public init(temperament: Temperament, position: Point, hourOfDay: Double, now: Double) {
         self.temperament = temperament
-        drives = .atBaselines(of: temperament, hourOfDay: hourOfDay)
+        drives = DriveDynamics.effectiveBaselines(temperament: temperament, hourOfDay: hourOfDay)
         situation = SituationModel(now: now)
         habituation = Habituation()
         gaze = GazeSystem(bodyCenter: position, now: now)

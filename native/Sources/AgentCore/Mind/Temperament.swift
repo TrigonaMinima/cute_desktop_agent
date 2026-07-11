@@ -35,6 +35,13 @@ public struct Temperament: Codable, Equatable {
         self.tempo = tempo
     }
 
+    /// The liveliness floor for `situation`, owning the fallback for a vector that
+    /// doesn't define one (every preset defines all four modes, so the fallback only
+    /// guards hand-built vectors) — callers never see the dictionary's optionality.
+    public func livelinessFloor(for situation: SituationMode) -> Double {
+        livelinessFloors[situation] ?? MindConstants.livelinessFloorFallback
+    }
+
     // MARK: Presets — the doc's four archetypes as points in the same vector space.
 
     /// The v0 default: rests more, spikes less, habituates fast, content alone, low

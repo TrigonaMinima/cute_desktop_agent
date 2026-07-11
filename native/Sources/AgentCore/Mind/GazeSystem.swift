@@ -1,7 +1,7 @@
 import Foundation
 
 /// What the eyes can be on. Raw values double as `Habituation` keys.
-public enum GazeTargetKind: String, Codable, CaseIterable, Equatable {
+public enum GazeTargetKind: String, Codable, Equatable {
     /// The user's pointer — weighted up when fast or near the body.
     case cursor
     /// Something that just changed: a window opened/switched. Novelty's pull, decaying.
@@ -59,8 +59,16 @@ public struct GazeSystem: Codable, Equatable {
     /// Where the committed target currently is (moves with the candidate under pursuit).
     var targetPoint: Point
     var lastSwitchAt: Double
+    /// Frontmost app+window identity, compared field-by-field per tick for onset
+    /// detection — a struct, not a concatenated string key, so no per-frame allocation.
+    struct WindowIdentity: Codable, Equatable {
+        var app: String?
+        var owner: String?
+        var title: String?
+    }
+
     /// Frontmost app+window identity last tick, for onset detection.
-    var lastWindowKey: String?
+    var lastWindow: WindowIdentity?
     var lastOnsetAt: Double?
     var onsetPoint: Point?
 
@@ -97,8 +105,9 @@ public struct GazeSystem: Codable, Equatable {
         }
 
         // Pursue wherever the committed target is *this* frame, so a moving candidate
-        // is tracked, not its position at commit time.
-        let current = candidates.first { $0.kind == targetKind }
+        // is tracked, not its position at commit time. Derivable from the scans already
+        // done: the committed target is the winner iff it holds the committed kind.
+        let current = targetKind == winner.kind ? winner : incumbent
         targetPoint = current?.point ?? Self.neutralPoint(bodyCenter: context.bodyCenter)
 
         habituation.expose(targetKind.rawValue, dt: dt, rate: context.temperament.habituationRate)
@@ -128,7 +137,7 @@ public struct GazeSystem: Codable, Equatable {
     public func direction(from center: Point) -> Vector {
         let dx = gazePoint.x - center.x
         let dy = gazePoint.y - center.y
-        let length = (dx * dx + dy * dy).squareRoot()
+        let length = distance(center, gazePoint)
         guard length > 0 else { return Vector(dx: 0, dy: 0) }
         let deflection = min(1, length / MindConstants.gazeDirectionFullDeflectionPx)
         return Vector(dx: dx / length * deflection, dy: dy / length * deflection)
@@ -167,11 +176,13 @@ public struct GazeSystem: Codable, Equatable {
             return base * arousalGain * fatigue
         }
 
-        var candidates = [Candidate(
+        var candidates: [Candidate] = []
+        candidates.reserveCapacity(6) // one per GazeTargetKind — no growth reallocations
+        candidates.append(Candidate(
             kind: .neutral,
             point: Self.neutralPoint(bodyCenter: context.bodyCenter),
             salience: 0.18
-        )]
+        ))
 
         let cursorSpeed = world.cursorVelocity.magnitude
         let speedPull = min(0.45, cursorSpeed / MindConstants.cursorSalienceSpeedScale * 0.75)
@@ -202,7 +213,7 @@ public struct GazeSystem: Codable, Equatable {
 
         if world.scrolling, let window = world.frontmostWindow {
             candidates.append(Candidate(
-                kind: .motion, point: Self.center(of: window.frame),
+                kind: .motion, point: center(of: window.frame),
                 salience: modulated(.motion, 0.6)
             ))
         }
@@ -259,18 +270,16 @@ public struct GazeSystem: Codable, Equatable {
     // MARK: Onset detection
 
     private mutating func detectOnset(world: AgentWorld, now: Double) {
-        let key = (world.frontmostApp?.bundleIdentifier ?? world.frontmostApp?.name ?? "")
-            + "|" + (world.frontmostWindow?.ownerName ?? "")
-            + "|" + (world.frontmostWindow?.title ?? "")
-        defer { lastWindowKey = key }
+        let identity = WindowIdentity(
+            app: world.frontmostApp?.bundleIdentifier ?? world.frontmostApp?.name,
+            owner: world.frontmostWindow?.ownerName,
+            title: world.frontmostWindow?.title
+        )
+        defer { lastWindow = identity }
         // First frame establishes the baseline — launching next to an open window is
         // not an event.
-        guard let lastWindowKey, lastWindowKey != key else { return }
+        guard let lastWindow, lastWindow != identity else { return }
         lastOnsetAt = now
-        onsetPoint = world.frontmostWindow.map { Self.center(of: $0.frame) } ?? world.cursor
-    }
-
-    private static func center(of rect: Rect) -> Point {
-        Point(x: rect.origin.x + rect.size.width / 2, y: rect.origin.y + rect.size.height / 2)
+        onsetPoint = world.frontmostWindow.map { center(of: $0.frame) } ?? world.cursor
     }
 }
