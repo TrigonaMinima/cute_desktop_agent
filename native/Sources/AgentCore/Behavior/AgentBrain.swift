@@ -27,10 +27,13 @@ public protocol AgentBrain: AnyObject {
 extension StateMachine: AgentBrain {}
 
 extension EmergentBrain: AgentBrain {
-    /// Protocol boot: calm temperament, the Phase 0 default preset.
+    /// Protocol boot: the brain's configured boot temperament (`.calm` unless the shell
+    /// passed the persisted preset at construction).
     public func makeInitialState(
         screens: [ScreenInfo], avatarSize: Size, now: Double
     ) -> AgentState {
-        makeInitialState(screens: screens, avatarSize: avatarSize, temperament: .calm, now: now)
+        makeInitialState(
+            screens: screens, avatarSize: avatarSize, temperament: bootTemperament, now: now
+        )
     }
 }

@@ -91,6 +91,10 @@ private extension StatusSummary {
             .init(label: "Behavior target", value: mind.behaviorTarget.map(formatPoint) ?? "\u{2014}"),
             .init(label: "Situation", value: displayName(for: mind.situation.mode)),
             .init(label: "Power", value: displayName(for: mind.power)),
+            .init(
+                label: "Temperament",
+                value: TemperamentPreset.matching(mind.temperament)?.displayName ?? "Custom"
+            ),
             .init(label: "Energy", value: formatPercent(mind.drives.energy)),
             .init(label: "Curiosity", value: formatPercent(mind.drives.curiosity)),
             .init(label: "Sociability", value: formatPercent(mind.drives.sociability)),

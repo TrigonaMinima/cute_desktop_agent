@@ -33,6 +33,15 @@ struct AgentBrainTests {
         #expect(state.body.position == Point(x: 500, y: 400))
     }
 
+    @Test func emergentBrain_bootsThroughTheSeam_withItsConfiguredBootTemperament() {
+        let clock = ManualClock()
+        let brain: AgentBrain = EmergentBrain(
+            rng: ScriptedRandom([]), clock: clock, hourOfDay: { 15 }, bootTemperament: .gremlin
+        )
+        let state = boot(brain, clock: clock)
+        #expect(state.mind?.temperament == .gremlin)
+    }
+
     @Test func tick_throughTheSeam_advancesEitherBrain() {
         let clock = ManualClock()
         let brains: [AgentBrain] = [

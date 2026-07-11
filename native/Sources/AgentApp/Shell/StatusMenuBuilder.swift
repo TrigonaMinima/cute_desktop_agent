@@ -17,7 +17,15 @@ enum StatusMenuBuilder {
     /// - Parameter launchAtLogin: when non-nil, a "Launch at Login" toggle is inserted
     ///   between the state rows and Quit, sharing the trailing separator. `nil` omits it
     ///   entirely.
-    static func build(for summary: StatusSummary, launchAtLogin: LaunchAtLoginController? = nil) -> Built {
+    /// - Parameter temperament: when non-nil (emergent brain only), a "Temperament"
+    ///   preset submenu is inserted ahead of the login toggle. Like the toggle, it is
+    ///   rebuilt per open rather than refreshed per frame — its checkmark only changes
+    ///   through this very menu, which closes on selection.
+    static func build(
+        for summary: StatusSummary,
+        launchAtLogin: LaunchAtLoginController? = nil,
+        temperament: TemperamentMenuController? = nil
+    ) -> Built {
         // `rowItems` is built by walking sections/rows in the same nested order as
         // `orderedRows(for:)` below (by construction: both are just `sections` then each
         // section's `rows`) — that shared order is what lets a live refresh `zip` these
@@ -37,6 +45,9 @@ enum StatusMenuBuilder {
             }
         }
         items.append(.separator())
+        if let temperament {
+            items.append(temperament.menuItem())
+        }
         if let launchAtLogin {
             let presentation = loginItemPresentation(for: launchAtLogin.status)
             let toggle = NSMenuItem(

@@ -16,16 +16,22 @@ public final class StatusItemController: NSObject {
     ///   this type's.
     /// - Parameter launchAtLogin: forwarded straight through to the underlying
     ///   `LiveMenuController` so the "Launch at Login" row shows up in this dropdown too —
-    ///   see `StatusMenuBuilder.build(for:launchAtLogin:)`.
+    ///   see `StatusMenuBuilder.build(for:launchAtLogin:temperament:)`.
+    /// - Parameter temperament: forwarded the same way for the "Temperament" preset
+    ///   submenu (emergent brain only).
     public init(
         title: String,
         summaryProvider: @escaping () -> StatusSummary,
-        launchAtLogin: LaunchAtLoginController? = nil
+        launchAtLogin: LaunchAtLoginController? = nil,
+        temperament: TemperamentMenuController? = nil
     ) {
         // .variableLength, not .squareLength — the latter is sized for an icon-only
         // button and clips a text/emoji title.
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        liveMenu = LiveMenuController(summaryProvider: summaryProvider, launchAtLogin: launchAtLogin)
+        liveMenu = LiveMenuController(
+            summaryProvider: summaryProvider, launchAtLogin: launchAtLogin,
+            temperament: temperament
+        )
         super.init()
         statusItem.button?.title = title
         statusItem.isVisible = true

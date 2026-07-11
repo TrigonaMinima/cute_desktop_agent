@@ -70,4 +70,24 @@ struct MindStateTests {
         #expect(labels.contains("Gaze"))
         #expect(labels.contains("Reflex"))
     }
+
+    @Test func statusSummary_temperamentRow_showsThePresetName() {
+        var state = TestFixtures.makeState()
+        state.mind = MindState(temperament: .gremlin, position: position, hourOfDay: 15, now: 0)
+        let summary = state.statusSummary(now: 0)
+        let row = summary.sections.first { $0.title == "Mind" }?
+            .rows.first { $0.label == "Temperament" }
+        #expect(row?.value == "Gremlin")
+    }
+
+    @Test func statusSummary_temperamentRow_fallsBackToCustomForANonPresetVector() {
+        var custom = Temperament.calm
+        custom.tempo = 0.123
+        var state = TestFixtures.makeState()
+        state.mind = MindState(temperament: custom, position: position, hourOfDay: 15, now: 0)
+        let summary = state.statusSummary(now: 0)
+        let row = summary.sections.first { $0.title == "Mind" }?
+            .rows.first { $0.label == "Temperament" }
+        #expect(row?.value == "Custom")
+    }
 }

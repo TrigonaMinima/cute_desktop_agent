@@ -99,3 +99,36 @@ public struct Temperament: Codable, Equatable {
         tempo: 1.1
     )
 }
+
+/// The four archetypes' stable identity — for the temperament menu and the
+/// `UserDefaults` persistence key, where a name has to survive across launches and a
+/// raw `Temperament` vector wouldn't (it has no notion of which preset it came from).
+/// `allCases` order is the menu order.
+public enum TemperamentPreset: String, CaseIterable, Codable {
+    case calm, gremlin, aloofCat, needyPet
+
+    public var temperament: Temperament {
+        switch self {
+        case .calm: return .calm
+        case .gremlin: return .gremlin
+        case .aloofCat: return .aloofCat
+        case .needyPet: return .needyPet
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .calm: return "Calm"
+        case .gremlin: return "Gremlin"
+        case .aloofCat: return "Aloof Cat"
+        case .needyPet: return "Needy Pet"
+        }
+    }
+
+    /// Reverse lookup: which preset a temperament vector is, or nil for a custom one
+    /// (nothing produces custom vectors today, but the status row's "Custom" fallback
+    /// keeps this total rather than trapping).
+    public static func matching(_ temperament: Temperament) -> TemperamentPreset? {
+        allCases.first { $0.temperament == temperament }
+    }
+}

@@ -236,6 +236,27 @@ struct EmergentBrainTests {
         #expect(state.mind!.habituation.level(for: "cursorDart") < before)
     }
 
+    // MARK: Temperament switching (decision log D10: swap the vector, drives ease over)
+
+    @Test func adoptTemperament_swapsTheVectorWithoutTouchingTheDrives() {
+        let clock = ManualClock()
+        var (brain, state) = makeBooted(clock: clock)
+        step(brain, &state, clock: clock, frames: 60)
+        let before = state.mind!.drives
+        brain.adoptTemperament(.gremlin, state: &state)
+        #expect(state.mind?.temperament == .gremlin)
+        #expect(state.mind?.drives == before)
+    }
+
+    @Test func adoptTemperament_drivesEaseTowardTheNewBaselinesOverSeconds() {
+        let clock = ManualClock()
+        var (brain, state) = makeBooted(clock: clock)
+        brain.adoptTemperament(.gremlin, state: &state)
+        step(brain, &state, clock: clock, frames: 80 * 60) // 80s — four arousal taus
+        let target = DriveDynamics.effectiveBaselines(temperament: .gremlin, hourOfDay: 15).arousal
+        #expect(abs(state.mind!.drives.arousal - target) < 0.05)
+    }
+
     // MARK: Power ladder (decision log D11: doze throttles, sleep hands off to the shell)
 
     @Test func tick_quietFor90Seconds_dozesAndThrottlesCognition() {

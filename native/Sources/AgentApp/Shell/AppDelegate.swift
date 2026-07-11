@@ -84,6 +84,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         state = brain.makeInitialState(
             screens: layout.screens, avatarSize: config.makeAvatar().intrinsicSize, now: clock.now()
         )
+        let temperamentMenu = makeTemperamentMenu(kind: config.brainKind)
 
         // One provider shared by both menu surfaces (status-item dropdown + avatar
         // right-click) so their live refresh reads the identical snapshot rule by
@@ -92,8 +93,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.summarySnapshot() ?? StatusSummary(sections: [])
         }
         let statusItemController = StatusItemController(
-            title: config.statusItemTitle, summaryProvider: summaryProvider, launchAtLogin: launchAtLogin)
-        let contextMenu = LiveMenuController(summaryProvider: summaryProvider, launchAtLogin: launchAtLogin)
+            title: config.statusItemTitle, summaryProvider: summaryProvider,
+            launchAtLogin: launchAtLogin, temperament: temperamentMenu)
+        let contextMenu = LiveMenuController(
+            summaryProvider: summaryProvider, launchAtLogin: launchAtLogin,
+            temperament: temperamentMenu)
 
         // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown
         // and scroll-wheel monitor registration are synchronous IPC with WindowServer/TCC,
@@ -169,19 +173,51 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// `UserDefaults` key holding the chosen temperament preset's raw value — read at
+    /// boot, written by the menu (D10: the preset survives relaunches; nothing else does).
+    private static let temperamentPresetKey = "temperamentPreset"
+
+    private var storedTemperamentPreset: TemperamentPreset {
+        UserDefaults.standard.string(forKey: Self.temperamentPresetKey)
+            .flatMap(TemperamentPreset.init(rawValue:)) ?? .calm
+    }
+
     /// Builds the config-selected brain. Both share the delegate's clock (see the
     /// `clock` doc comment); the emergent brain also gets a wall-clock hour reader for
-    /// its circadian baselines — fractional, so 14:30 reads as 14.5.
+    /// its circadian baselines — fractional, so 14:30 reads as 14.5 — and boots at the
+    /// persisted temperament preset.
     private func makeBrain(kind: BrainKind) -> AgentBrain {
         switch kind {
         case .classic:
             return StateMachine(rng: SystemRandom(), clock: clock)
         case .emergent:
-            return EmergentBrain(rng: SystemRandom(), clock: clock, hourOfDay: {
-                let parts = Calendar.current.dateComponents([.hour, .minute], from: Date())
-                return Double(parts.hour ?? 12) + Double(parts.minute ?? 0) / 60
-            })
+            return EmergentBrain(
+                rng: SystemRandom(), clock: clock,
+                hourOfDay: {
+                    let parts = Calendar.current.dateComponents([.hour, .minute], from: Date())
+                    return Double(parts.hour ?? 12) + Double(parts.minute ?? 0) / 60
+                },
+                bootTemperament: storedTemperamentPreset.temperament
+            )
         }
+    }
+
+    /// The "Temperament" submenu's controller — emergent brain only; the classic brain
+    /// has no temperament, so its menus omit the item entirely. Selection persists the
+    /// preset and tells the live brain to adopt it in place (the drives ease over).
+    private func makeTemperamentMenu(kind: BrainKind) -> TemperamentMenuController? {
+        guard kind == .emergent else { return nil }
+        return TemperamentMenuController(
+            current: { [weak self] in
+                self?.state?.mind.flatMap { TemperamentPreset.matching($0.temperament) }
+            },
+            onSelect: { [weak self] preset in
+                guard let self else { return }
+                UserDefaults.standard.set(preset.rawValue, forKey: Self.temperamentPresetKey)
+                (self.brain as? EmergentBrain)?
+                    .adoptTemperament(preset.temperament, state: &self.state)
+            }
+        )
     }
 
     /// The per-frame driver `FrameClock` calls: poll perception, advance the brain,

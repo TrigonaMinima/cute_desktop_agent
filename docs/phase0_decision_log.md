@@ -354,6 +354,37 @@ the AgentCore/AppKit boundary.
 
 ---
 
+## D19. Temperament preset menu: identity enum, adopt-in-place, UserDefaults
+
+**Decision**: preset switching (D10) ships as a "Temperament" submenu on both
+status surfaces, with these mechanics:
+
+- **`TemperamentPreset` is a small raw-string enum** (`calm` / `gremlin` /
+  `aloofCat` / `needyPet`) giving the four archetype vectors a stable identity
+  for the menu and for persistence — a raw `Temperament` vector has no notion
+  of which preset it came from. `matching(_:)` reverse-looks-up a vector;
+  the status row falls back to "Custom" for a non-preset vector rather than
+  trapping (nothing produces one today).
+- **Switching is `EmergentBrain.adoptTemperament(_:state:)`**: swaps
+  `mind.temperament` and nothing else — drives keep their values and ease
+  toward the new baselines via their own leaky dynamics (a mood shift, not a
+  personality transplant). A brain method rather than a raw `state.mind` write
+  from the shell, preserving the single-writer discipline the same way the
+  drag seam does.
+- **Persistence is one `UserDefaults` key, `temperamentPreset`**, storing the
+  raw value. Read at boot (the brain gains a `bootTemperament` init parameter
+  the `AgentBrain`-seam `makeInitialState` uses; default stays `.calm`),
+  written on every menu selection. Per D10 this is the only thing that
+  survives a relaunch in Phase 0.
+- **The submenu only exists on the emergent path** — the classic brain has no
+  temperament, so its menus omit the item entirely. The submenu is rebuilt per
+  menu open (checkmark from live state), not refreshed per frame: its state
+  can only change through the menu itself, which closes on selection.
+- A "Temperament" row was added to the Mind status section, so the current
+  preset is visible (and live-updating) on both surfaces per the project rule.
+
+---
+
 ## Deferred follow-ups discovered during the build
 
 - Authored yawn/stretch/wary-watch set-piece faces (need user-confirmed

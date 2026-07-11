@@ -17,11 +17,19 @@ public final class EmergentBrain {
     private let rng: RandomProvider
     private let clock: Clock
     private let hourOfDay: () -> Double
+    /// The temperament the `AgentBrain`-seam boot uses — the shell passes the persisted
+    /// preset here, since the protocol's `makeInitialState` has no temperament parameter.
+    /// Internal, not private: the seam conformance in `AgentBrain.swift` reads it.
+    let bootTemperament: Temperament
 
-    public init(rng: RandomProvider, clock: Clock, hourOfDay: @escaping () -> Double) {
+    public init(
+        rng: RandomProvider, clock: Clock, hourOfDay: @escaping () -> Double,
+        bootTemperament: Temperament = .calm
+    ) {
         self.rng = rng
         self.clock = clock
         self.hourOfDay = hourOfDay
+        self.bootTemperament = bootTemperament
     }
 
     // MARK: - Boot
@@ -374,6 +382,17 @@ public final class EmergentBrain {
             x: mind.physics.position.x + size.width / 2,
             y: mind.physics.position.y + size.height / 2
         )
+    }
+
+    // MARK: - Temperament switching (decision log D10)
+
+    /// Swaps the temperament vector in place and nothing else: the drives keep their
+    /// current values and ease toward the new baselines over seconds via their own
+    /// leaky dynamics — switching preset is a mood shift, not a personality transplant.
+    /// A brain method (not a raw `state.mind` write from the shell) to keep the
+    /// single-writer discipline: like the drag seam, this is the Brain being told.
+    public func adoptTemperament(_ temperament: Temperament, state: inout AgentState) {
+        state.mind?.temperament = temperament
     }
 
     // MARK: - Drag seam (mirrors the classic StateMachine's signatures)

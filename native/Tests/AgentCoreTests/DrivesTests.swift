@@ -196,4 +196,38 @@ struct DrivesTests {
         // Calm is not the collapse trap: the idle-desktop floor stays strictly positive.
         #expect(Temperament.calm.livelinessFloors[.casualBrowsing]! > 0)
     }
+
+    // MARK: TemperamentPreset (the four archetypes' menu/persistence identity)
+
+    @Test func presets_menuOrder_isCalmGremlinAloofCatNeedyPet() {
+        #expect(TemperamentPreset.allCases == [.calm, .gremlin, .aloofCat, .needyPet])
+    }
+
+    @Test func preset_temperament_mapsToTheMatchingArchetypeVector() {
+        #expect(TemperamentPreset.gremlin.temperament == .gremlin)
+        #expect(TemperamentPreset.needyPet.temperament == .needyPet)
+    }
+
+    @Test func preset_matching_recoversThePresetFromItsVector() {
+        #expect(TemperamentPreset.matching(Temperament.aloofCat) == .aloofCat)
+    }
+
+    @Test func preset_matching_isNilForACustomVector() {
+        var custom = Temperament.calm
+        custom.tempo = 0.123
+        #expect(TemperamentPreset.matching(custom) == nil)
+    }
+
+    @Test func preset_displayNames_areHumanReadable() {
+        #expect(TemperamentPreset.calm.displayName == "Calm")
+        #expect(TemperamentPreset.gremlin.displayName == "Gremlin")
+        #expect(TemperamentPreset.aloofCat.displayName == "Aloof Cat")
+        #expect(TemperamentPreset.needyPet.displayName == "Needy Pet")
+    }
+
+    @Test func preset_rawValues_roundTripForPersistence() {
+        for preset in TemperamentPreset.allCases {
+            #expect(TemperamentPreset(rawValue: preset.rawValue) == preset)
+        }
+    }
 }
