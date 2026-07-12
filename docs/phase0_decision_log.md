@@ -431,6 +431,48 @@ deduped and applied as one cleanup commit. The notable applied changes:
 
 ---
 
+## D21. Brain menu: live switch, pinned first, config-as-default
+
+**Decision**: `config.json`'s `"brain"` key was previously the only switch
+(fixed at boot). It's now the *default*; a "Brain" submenu on both status
+surfaces lets the classic and emergent brains be swapped live, mirroring D19's
+temperament menu almost exactly:
+
+- **`BrainMenuController`** is D19's `TemperamentMenuController` shape reused
+  for `BrainKind.allCases` (now `CaseIterable` with a `displayName`) — a
+  submenu, checkmarked at the live brain, rebuilt per menu open. Unlike the
+  temperament controller it is never optional: both brains always support
+  switching, so `AppDelegate` always constructs one.
+- **Pinned as the very first item** of `StatusMenuBuilder.build`'s output
+  (ahead of a separator, ahead of the status sections) — the one departure
+  from every other menu row, which appends after the sections.
+- **Switching is `AppDelegate.switchBrain(to:)`**: no-ops on reselecting the
+  live brain; wakes the shell first if the sleep tier (D11/D18) had the frame
+  clock stopped (the classic brain never requests runtime sleep, so a frozen
+  clock would otherwise never restart); persists the choice; then rebuilds
+  `AgentState` via the new brain's `makeInitialState` and carries the avatar's
+  `body.position`/`size` over so it doesn't teleport to screen center.
+  Everything downstream already goes through the `AgentBrain` seam, so no
+  other call site branches on which brain is live.
+- **Persistence is one `UserDefaults` key, `brainKind`**, storing the raw
+  value — read at boot (falling back to `config.brainKind` on first launch),
+  written on every menu selection. Same shape as D19's `temperamentPreset`
+  key; `config.json`'s `"brain"` is now "the default before any menu choice,"
+  not "the only choice."
+- **The Temperament submenu's presence had to become dynamic.** It used to be
+  built-or-omitted once at launch (`brain is TemperamentControlling`) because
+  the brain never changed underfoot. Now it can. Fix: `TemperamentMenuController`
+  is constructed unconditionally and gained an `isAvailable: () -> Bool`
+  closure; `menuItem()` returns `NSMenuItem?`, nil when unavailable, checked
+  at every menu open. `isAvailable` is a signal *separate* from `current`
+  (which already returns an optional `TemperamentPreset?`) because mid-ease —
+  drives easing toward a newly adopted preset's baselines — `current()`
+  legitimately returns nil for an available, emergent-backed menu; conflating
+  that nil with "unavailable" would flicker the submenu out during every
+  preset transition.
+
+---
+
 ## Deferred follow-ups discovered during the build
 
 - Authored yawn/stretch/wary-watch set-piece faces (need user-confirmed

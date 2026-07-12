@@ -14,26 +14,32 @@ enum StatusMenuBuilder {
         let rowItems: [NSMenuItem]
     }
 
+    /// - Parameter brain: the "Brain" submenu, pinned as the very first item ahead of a
+    ///   separator — both brains always support switching, so this is never omitted (D21).
     /// - Parameter launchAtLogin: when non-nil, a "Launch at Login" toggle is inserted
     ///   between the state rows and Quit, sharing the trailing separator. `nil` omits it
     ///   entirely.
-    /// - Parameter temperament: when non-nil (emergent brain only), a "Temperament"
-    ///   preset submenu is inserted ahead of the login toggle. Like the toggle, it is
-    ///   rebuilt per open rather than refreshed per frame — its checkmark only changes
-    ///   through this very menu, which closes on selection.
+    /// - Parameter temperament: always constructed by the caller now (D21); its
+    ///   `menuItem()` returns nil for the classic brain (see its doc comment), in which
+    ///   case the "Temperament" row is simply omitted. Present ahead of the login toggle
+    ///   when non-nil. Like the toggle, it is rebuilt per open rather than refreshed per
+    ///   frame — its checkmark only changes through this very menu, which closes on
+    ///   selection.
     static func build(
         for summary: StatusSummary,
-        launchAtLogin: LaunchAtLoginController? = nil,
-        temperament: TemperamentMenuController? = nil
+        brain: BrainMenuController,
+        temperament: TemperamentMenuController,
+        launchAtLogin: LaunchAtLoginController? = nil
     ) -> Built {
         // `rowItems` is built by walking sections/rows in the same nested order as
         // `orderedRows(for:)` below (by construction: both are just `sections` then each
         // section's `rows`) — that shared order is what lets a live refresh `zip` these
-        // items against `rowTitles(for:)`'s output. The login-item toggle below is
-        // deliberately NOT added to `rowItems`: its title only changes across menu opens
-        // (registration is user- or System-Settings-driven, not per-frame state), so it
-        // doesn't need `refreshIfOpen`'s per-frame title push.
-        var items: [NSMenuItem] = []
+        // items against `rowTitles(for:)`'s output. The Brain item and the login-item
+        // toggle below are deliberately NOT added to `rowItems`: their content only
+        // changes across menu opens (a brain swap or login registration change closes
+        // the menu first), not per-frame state, so neither needs `refreshIfOpen`'s
+        // per-frame title push.
+        var items: [NSMenuItem] = [brain.menuItem(), .separator()]
         var rowItems: [NSMenuItem] = []
         for section in summary.sections {
             items.append(.sectionHeader(title: section.title))
@@ -45,8 +51,8 @@ enum StatusMenuBuilder {
             }
         }
         items.append(.separator())
-        if let temperament {
-            items.append(temperament.menuItem())
+        if let temperamentItem = temperament.menuItem() {
+            items.append(temperamentItem)
         }
         if let launchAtLogin {
             let presentation = loginItemPresentation(for: launchAtLogin.status)

@@ -13,17 +13,29 @@ public struct AppConfig: Decodable {
     /// still decodes; read through `brainKind` for the default.
     private let brain: BrainKind?
 
-    /// The emergent brain is the default; `"brain": "classic"` in config.json is the
-    /// rollback switch to the blob.js-parity StateMachine.
+    /// The emergent brain is the default; `"brain": "classic"` in config.json picks the
+    /// blob.js-parity StateMachine at boot instead. This is only the *default* — the
+    /// menu-bar "Brain" submenu (`BrainMenuController`) can switch live afterward, and a
+    /// prior menu selection persisted in UserDefaults overrides this at boot (see
+    /// `AppDelegate.storedBrainKind`).
     public var brainKind: BrainKind { brain ?? .emergent }
 }
 
-/// The set of `AgentBrain` conformers `config.json`'s `brain` field may name. Same
-/// decode-to-enum discipline as `AvatarKind`: an unrecognized value is a config decode
-/// error at launch, not a fallback deep in brain selection.
-public enum BrainKind: String, Decodable {
+/// The set of `AgentBrain` conformers `config.json`'s `brain` field — and the menu-bar
+/// "Brain" submenu — may name. Same decode-to-enum discipline as `AvatarKind`: an
+/// unrecognized value is a config decode error at launch, not a fallback deep in brain
+/// selection.
+public enum BrainKind: String, Decodable, CaseIterable {
     case classic
     case emergent
+
+    /// Menu row label — `TemperamentPreset.displayName`'s sibling.
+    public var displayName: String {
+        switch self {
+        case .classic: return "Classic"
+        case .emergent: return "Emergent"
+        }
+    }
 }
 
 /// The set of `Avatar` conformers `config.json`'s `avatar` field may name. Decoding

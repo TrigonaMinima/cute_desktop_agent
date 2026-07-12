@@ -40,11 +40,14 @@ Two-target Swift package plus a throwaway spike, defined in `native/Package.swif
   `Math/TargetPicking.swift`), the two brains (below), and the `AgentState` model
   (`State/AgentState.swift`). No AppKit import, fully unit-testable headless via
   `swift test`. Two brains conform to the `AgentBrain` seam
-  (`Behavior/AgentBrain.swift`) and are selected by `config.json`'s `"brain"` key:
+  (`Behavior/AgentBrain.swift`). `config.json`'s `"brain"` key picks the boot
+  default; the menu-bar/avatar-context "Brain" submenu (first item — see
+  `Shell/BrainMenuController.swift`) switches live afterward and persists the
+  choice in UserDefaults across relaunches (D21):
   - `Behavior/StateMachine.swift` — the **classic** brain, a **mechanical port** of
     `electron-poc/renderer/blob.js` (lines ~90-431). When its behavior looks odd,
     check the doc comments explaining the JS source parity rather than "fixing" it
-    to look more idiomatic. Rollback switch: `"brain": "classic"`.
+    to look more idiomatic. Boot default override: `"brain": "classic"`.
   - `Mind/` — the **emergent** brain (the default): `EmergentBrain.swift` composes
     layered systems — drives (`Drives.swift`, `DriveDynamics.swift`,
     `Temperament.swift`), situation model (`SituationModel.swift`), fixed-timestep
@@ -123,11 +126,12 @@ loop. Because both surfaces are built from the identical builder/controller pair
   `AppConfig.makeAvatar()` (`Config/AppConfig.swift`) — nothing else in the render layer
   changes. Only `SlimeAvatar` exists today.
 - **Brains**: `AgentBrain` protocol (`Behavior/AgentBrain.swift`) is the only interface
-  the shell drives — swapping brains is pure configuration (`config.json`'s `"brain"`
-  key: `emergent` default, `classic` rollback), no per-brain branches in the frame
-  driver or drag wiring.
-- **Branding**: display name, bundle identifier, status-item glyph, avatar choice, and
-  brain choice live in `native/config.json`, never as literals in code — `AppConfig`
+  the shell drives — swapping brains is pure configuration, no per-brain branches in the
+  frame driver or drag wiring. `config.json`'s `"brain"` key (`emergent` default, `classic`
+  rollback) picks the boot default; `Shell/BrainMenuController.swift` swaps the live brain
+  from the menu afterward, persisted in UserDefaults (D21).
+- **Branding**: display name, bundle identifier, status-item glyph, avatar choice, and the
+  brain boot default live in `native/config.json`, never as literals in code — `AppConfig`
   decodes it at runtime from the app bundle's `Resources/`, and `build-app.sh` reads the
   same file at bundle-assembly time for `Info.plist` substitution.
 

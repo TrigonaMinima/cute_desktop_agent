@@ -11,11 +11,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // comparisons (modeEndsAt, cognition slices, ...) must read the same clock instance,
     // or every timer is off by however far apart the two instances were constructed.
     private let clock = SystemClock()
-    /// The active brain, selected from `config.json`'s `brain` key at launch (see
-    /// `AppConfig.brainKind`) — built in `applicationDidFinishLaunching` because it
-    /// needs the decoded config. Everything after construction goes through the
-    /// `AgentBrain` seam, so the shell never branches on which brain is live.
+    /// The active brain, selected from `storedBrainKind` at launch (config.json's `brain`
+    /// key as the default, overridden by a persisted menu choice — see
+    /// `storedBrainKind`/D21) — built in `applicationDidFinishLaunching` because it needs
+    /// the decoded config, and swapped live afterward by `switchBrain(to:)`. Everything
+    /// after construction goes through the `AgentBrain` seam, so the shell never branches
+    /// on which brain is live.
     private var brain: AgentBrain!
+    /// Which `BrainKind` `brain` currently is — kept alongside the existential because
+    /// `AgentBrain` doesn't expose its own kind, and the "Brain" menu needs it both to
+    /// checkmark the live row and to no-op a reselection of the already-active brain.
+    /// Set everywhere `brain` is (re)assigned.
+    private var currentBrainKind: BrainKind = .emergent
     // Shares `clock` with `brain` for the same reason as above — the typing signal's
     // "how long since the last keystroke" comparison must use the same clock instance
     // the rest of the tick's timers do.
@@ -80,10 +87,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let layout = ScreenLayout.current(fallback: nil) else { fatalError("AgentApp: no screen") }
 
-        brain = makeBrain(kind: config.brainKind)
+        currentBrainKind = storedBrainKind
+        brain = makeBrain(kind: currentBrainKind)
         state = brain.makeInitialState(
             screens: layout.screens, avatarSize: config.makeAvatar().intrinsicSize, now: clock.now()
         )
+        let brainMenu = makeBrainMenu()
         let temperamentMenu = makeTemperamentMenu()
 
         // One provider shared by both menu surfaces (status-item dropdown + avatar
@@ -93,11 +102,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.summarySnapshot() ?? StatusSummary(sections: [])
         }
         let statusItemController = StatusItemController(
-            title: config.statusItemTitle, summaryProvider: summaryProvider,
-            launchAtLogin: launchAtLogin, temperament: temperamentMenu)
+            title: config.statusItemTitle, summaryProvider: summaryProvider, brain: brainMenu,
+            temperament: temperamentMenu, launchAtLogin: launchAtLogin)
         let contextMenu = LiveMenuController(
-            summaryProvider: summaryProvider, launchAtLogin: launchAtLogin,
-            temperament: temperamentMenu)
+            summaryProvider: summaryProvider, brain: brainMenu, temperament: temperamentMenu,
+            launchAtLogin: launchAtLogin)
 
         // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown
         // and scroll-wheel monitor registration are synchronous IPC with WindowServer/TCC,
@@ -182,10 +191,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             .flatMap(TemperamentPreset.init(rawValue:)) ?? .calm
     }
 
-    /// Builds the config-selected brain. Both share the delegate's clock (see the
-    /// `clock` doc comment); the emergent brain also gets a wall-clock hour reader for
-    /// its circadian baselines — fractional, so 14:30 reads as 14.5 — and boots at the
-    /// persisted temperament preset.
+    /// `UserDefaults` key holding the chosen brain's raw value — read at boot (falling
+    /// back to `config.json`'s `brain` key, `AppConfig.brainKind`), written by the
+    /// "Brain" menu (D21: a live switch, mirroring D10's temperament persistence — the
+    /// choice survives relaunches, config.json is just the first-ever-launch default).
+    private static let brainKindKey = "brainKind"
+
+    private var storedBrainKind: BrainKind {
+        UserDefaults.standard.string(forKey: Self.brainKindKey)
+            .flatMap(BrainKind.init(rawValue:)) ?? config.brainKind
+    }
+
+    /// Builds the given brain. Both share the delegate's clock (see the `clock` doc
+    /// comment); the emergent brain also gets a wall-clock hour reader for its circadian
+    /// baselines — fractional, so 14:30 reads as 14.5 — and boots at the persisted
+    /// temperament preset. Does not touch `currentBrainKind` — callers (launch and
+    /// `switchBrain(to:)`) own that assignment alongside `brain` itself.
     private func makeBrain(kind: BrainKind) -> AgentBrain {
         switch kind {
         case .classic:
@@ -203,13 +224,49 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The "Temperament" submenu's controller — only for brains that declare the
-    /// capability (`TemperamentControlling`); others omit the item entirely, and the
-    /// shell never names a concrete brain type. Selection persists the preset and tells
-    /// the live brain to adopt it in place (the drives ease over).
-    private func makeTemperamentMenu() -> TemperamentMenuController? {
-        guard brain is TemperamentControlling else { return nil }
-        return TemperamentMenuController(
+    /// The "Brain" submenu's controller, pinned as the first item of both status
+    /// surfaces (D21). Selection persists the choice and swaps the live brain in place
+    /// via `switchBrain(to:)`.
+    private func makeBrainMenu() -> BrainMenuController {
+        BrainMenuController(
+            current: { [weak self] in self?.currentBrainKind ?? .emergent },
+            onSelect: { [weak self] kind in self?.switchBrain(to: kind) }
+        )
+    }
+
+    /// Swaps the live brain in place (D21): no-ops if `kind` is already active; wakes the
+    /// shell first if the previous brain had put it to sleep (the classic brain never
+    /// requests runtime sleep, so a stopped clock would otherwise freeze the swap);
+    /// persists the choice; then rebuilds `state` from the new brain's `makeInitialState`
+    /// and carries the avatar's on-screen position/size over so it doesn't teleport to
+    /// screen center. Everything past this point already goes through the `AgentBrain`
+    /// seam, so no other call site needs to change.
+    private func switchBrain(to kind: BrainKind) {
+        guard kind != currentBrainKind, let runtime else { return }
+        if dormant {
+            wakeFromSleep()
+        }
+        UserDefaults.standard.set(kind.rawValue, forKey: Self.brainKindKey)
+
+        let previousBody = state.body
+        currentBrainKind = kind
+        brain = makeBrain(kind: kind)
+        state = brain.makeInitialState(
+            screens: runtime.layout.screens, avatarSize: config.makeAvatar().intrinsicSize, now: clock.now()
+        )
+        state.body.position = previousBody.position
+        state.body.size = previousBody.size
+    }
+
+    /// The "Temperament" submenu's controller. Constructed unconditionally (D21) — the
+    /// live brain can now change after launch via the "Brain" menu, so this can't be
+    /// built-or-omitted once at boot the way it was before switching existed;
+    /// `isAvailable` gates the row per-open instead (see its doc comment for why that's a
+    /// separate signal from `current`). Selection persists the preset and tells the live
+    /// brain to adopt it in place (the drives ease over).
+    private func makeTemperamentMenu() -> TemperamentMenuController {
+        TemperamentMenuController(
+            isAvailable: { [weak self] in self?.brain is TemperamentControlling },
             current: { [weak self] in
                 self?.state?.mind.flatMap { TemperamentPreset.matching($0.temperament) }
             },

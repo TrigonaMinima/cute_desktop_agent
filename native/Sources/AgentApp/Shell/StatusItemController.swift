@@ -14,23 +14,26 @@ public final class StatusItemController: NSObject {
     ///   again each frame while open. `AppDelegate` supplies one reading its current
     ///   `AgentState`; a `nil` state (e.g. before first tick) is its caller's concern, not
     ///   this type's.
-    /// - Parameter launchAtLogin: forwarded straight through to the underlying
-    ///   `LiveMenuController` so the "Launch at Login" row shows up in this dropdown too —
-    ///   see `StatusMenuBuilder.build(for:launchAtLogin:temperament:)`.
+    /// - Parameter brain: forwarded straight through to the underlying `LiveMenuController`
+    ///   for the "Brain" submenu pinned as this dropdown's first item — see
+    ///   `StatusMenuBuilder.build(for:brain:temperament:launchAtLogin:)`.
     /// - Parameter temperament: forwarded the same way for the "Temperament" preset
-    ///   submenu (emergent brain only).
+    ///   submenu row (nil when unavailable — see its doc comment).
+    /// - Parameter launchAtLogin: forwarded straight through to the underlying
+    ///   `LiveMenuController` so the "Launch at Login" row shows up in this dropdown too.
     public init(
         title: String,
         summaryProvider: @escaping () -> StatusSummary,
-        launchAtLogin: LaunchAtLoginController? = nil,
-        temperament: TemperamentMenuController? = nil
+        brain: BrainMenuController,
+        temperament: TemperamentMenuController,
+        launchAtLogin: LaunchAtLoginController? = nil
     ) {
         // .variableLength, not .squareLength — the latter is sized for an icon-only
         // button and clips a text/emoji title.
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         liveMenu = LiveMenuController(
-            summaryProvider: summaryProvider, launchAtLogin: launchAtLogin,
-            temperament: temperament
+            summaryProvider: summaryProvider, brain: brain, temperament: temperament,
+            launchAtLogin: launchAtLogin
         )
         super.init()
         statusItem.button?.title = title
