@@ -2,6 +2,14 @@ import AppKit
 import QuartzCore
 import AgentCore
 
+extension CGRect {
+    /// `AgentCore.Rect` and `CGRect` are structurally identical (origin + size); this is
+    /// the one place that bridges them instead of expanding the fields at each call site.
+    init(_ rect: Rect) {
+        self.init(x: rect.origin.x, y: rect.origin.y, width: rect.size.width, height: rect.size.height)
+    }
+}
+
 /// Layer-backed host for the active `Avatar`. Generic over any conformer — everything
 /// avatar-specific comes through the `Avatar` protocol; this file owns the per-frame
 /// orchestration that's the same regardless of shape: positioning, squash, blink,
@@ -15,6 +23,28 @@ public final class AvatarView: NSView {
     private let layers: AvatarLayers
     private var appliedEmotion: Emotion?
     private var currentFace: EmotionFaceSpec?
+
+    // MARK: Timer row — [button][remaining][total], positioned each frame from
+    // `AgentCore`'s `timerControlRect`/`timerRemainingRect`/`timerTotalRect` (the single
+    // geometry source `updateHitTest` and mouse routing also use). Built once here,
+    // shown/hidden and repositioned in `render` — never rebuilt per frame.
+    /// Plain `CALayer`, not `CAShapeLayer` — a flat rounded rect via
+    /// `backgroundColor`/`cornerRadius` needs no explicit `path`.
+    private let timerButton = CALayer()
+    /// A vector path (two bars / a triangle), not a `CATextLayer` glyph — `CATextLayer`
+    /// has no reliable vertical-centering API (it draws from the top of its bounds,
+    /// offset by font metrics that vary per glyph), which read as visibly off-center
+    /// inside the button. A path built directly against the button's own bounds centers
+    /// by construction: no font-metric guessing involved.
+    private let timerButtonGlyph = CAShapeLayer()
+    private let timerRemaining = CATextLayer()
+    private let timerTotal = CATextLayer()
+    /// Diffed against each frame so `render` doesn't rewrite unchanged layer strings at
+    /// 60Hz — mirrors the `emotion != appliedEmotion` discipline below.
+    private var appliedRemainingString: String?
+    private var appliedTotalString: String?
+    private var appliedButtonRunning: Bool?
+    private var appliedOvertime: Bool?
 
     /// This panel's display's full-frame origin in GLOBAL web space. `AgentState` works
     /// in global web coordinates spanning all displays; each panel only covers its own
@@ -49,6 +79,30 @@ public final class AvatarView: NSView {
         wantsLayer = true
         layer?.addSublayer(layers.body)
         layer?.addSublayer(layers.bubble)
+
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        timerButton.backgroundColor = NSColor(white: 1, alpha: 0.22).cgColor
+        timerButton.cornerRadius = 9
+        timerButton.isHidden = true
+        timerButton.contentsScale = scale
+        timerButtonGlyph.fillColor = NSColor.white.cgColor
+        timerButtonGlyph.strokeColor = nil
+        timerButtonGlyph.contentsScale = scale
+        timerButton.addSublayer(timerButtonGlyph)
+
+        for label in [timerRemaining, timerTotal] {
+            label.fontSize = 18
+            label.font = NSFont.monospacedDigitSystemFont(ofSize: 18, weight: .semibold)
+            label.alignmentMode = .left
+            label.contentsScale = scale
+            label.isHidden = true
+        }
+        timerRemaining.foregroundColor = NSColor.white.cgColor
+        timerTotal.foregroundColor = NSColor(white: 1, alpha: 0.6).cgColor
+
+        layer?.addSublayer(timerButton)
+        layer?.addSublayer(timerRemaining)
+        layer?.addSublayer(timerTotal)
     }
 
     @available(*, unavailable)
@@ -135,7 +189,120 @@ public final class AvatarView: NSView {
         // blob.js: bubbleEl translate(state.x + BLOB_WIDTH/2 - 9, state.y - 16).
         layers.bubble.position = CGPoint(x: origin.x + CGFloat(size.width) / 2 - 9, y: origin.y - 16)
 
+        renderTimer(state.timer, localOrigin: origin, size: size)
+
         CATransaction.commit()
+    }
+
+    /// Positions/shows/hides the `[button][remaining][total]` row from the same
+    /// `AgentCore` geometry (`timerControlRect`/`timerRemainingRect`/`timerTotalRect`)
+    /// `AppDelegate`'s mouse routing and hit-testing use — passing `localOrigin` (already
+    /// view-local) straight in as `position` works because those functions are pure
+    /// offset arithmetic, indifferent to which space their inputs are expressed in.
+    /// Strings are diffed before reassignment (mirrors the `appliedEmotion` discipline
+    /// above) so this doesn't rewrite three `CATextLayer.string`s 60x/sec.
+    private func renderTimer(_ timer: TimerState?, localOrigin: CGPoint, size: Size) {
+        guard let timer, timer.active else {
+            guard appliedButtonRunning != nil else { return } // already hidden; nothing to do
+            timerButton.isHidden = true
+            timerRemaining.isHidden = true
+            timerTotal.isHidden = true
+            appliedButtonRunning = nil
+            appliedRemainingString = nil
+            appliedTotalString = nil
+            appliedOvertime = nil
+            return
+        }
+
+        let position = Point(x: Double(localOrigin.x), y: Double(localOrigin.y))
+        let buttonRect = timerControlRect(position: position, size: size)
+        let remainingRect = timerRemainingRect(position: position, size: size)
+        let totalRect = timerTotalRect(position: position, size: size)
+
+        timerButton.isHidden = false
+        timerButton.frame = CGRect(buttonRect)
+        timerButtonGlyph.frame = timerButton.bounds
+        if appliedButtonRunning != timer.running {
+            appliedButtonRunning = timer.running
+            timerButtonGlyph.path = timer.running
+                ? pauseGlyphPath(in: timerButton.bounds)
+                : playGlyphPath(in: timerButton.bounds)
+        }
+
+        timerRemaining.isHidden = false
+        timerRemaining.frame = centeredTextFrame(in: CGRect(remainingRect), fontSize: timerRemaining.fontSize)
+        if appliedOvertime != timer.isOvertime {
+            appliedOvertime = timer.isOvertime
+            timerRemaining.foregroundColor = (timer.isOvertime ? NSColor.systemOrange : NSColor.white).cgColor
+        }
+        if appliedRemainingString != timer.remainingString {
+            appliedRemainingString = timer.remainingString
+            timerRemaining.string = timer.remainingString
+        }
+
+        // The total-elapsed value only appears once overtime is reached — hidden
+        // entirely before 00:00 (explicit, late-corrected requirement — see the plan).
+        timerTotal.isHidden = !timer.isOvertime
+        guard timer.isOvertime else {
+            appliedTotalString = nil
+            return
+        }
+        timerTotal.frame = centeredTextFrame(in: CGRect(totalRect), fontSize: timerTotal.fontSize)
+        let totalText = "(\(timer.totalString))"
+        if appliedTotalString != totalText {
+            appliedTotalString = totalText
+            timerTotal.string = totalText
+        }
+    }
+
+    /// A `CATextLayer` draws from the top of its bounds, not vertically centered — this
+    /// nudges the frame down by the slack between the slot's height and the font's
+    /// actual glyph height so single-line digits/parens read centered in their row
+    /// slot instead of hugging the top edge.
+    private func centeredTextFrame(in rect: CGRect, fontSize: CGFloat) -> CGRect {
+        let glyphHeight = fontSize * 0.78
+        let yInset = (rect.height - glyphHeight) / 2
+        return rect.offsetBy(dx: 0, dy: yInset)
+    }
+
+    /// Two rounded bars, centered in `rect` — the "running" state of the on-screen
+    /// button. Built directly against the button's own bounds so centering is exact
+    /// rect math, not font-metric guesswork (see `timerButtonGlyph`'s doc comment).
+    private func pauseGlyphPath(in rect: CGRect) -> CGPath {
+        let barWidth = rect.width * 0.16
+        let barHeight = rect.height * 0.44
+        let gap = rect.width * 0.14
+        let totalWidth = barWidth * 2 + gap
+        let originX = rect.midX - totalWidth / 2
+        let originY = rect.midY - barHeight / 2
+        let radius = barWidth * 0.3
+        let path = CGMutablePath()
+        path.addPath(CGPath(
+            roundedRect: CGRect(x: originX, y: originY, width: barWidth, height: barHeight),
+            cornerWidth: radius, cornerHeight: radius, transform: nil
+        ))
+        path.addPath(CGPath(
+            roundedRect: CGRect(x: originX + barWidth + gap, y: originY, width: barWidth, height: barHeight),
+            cornerWidth: radius, cornerHeight: radius, transform: nil
+        ))
+        return path
+    }
+
+    /// A single triangle, centered in `rect` — the "paused" state of the on-screen
+    /// button. Nudged a hair right of true geometric center, the standard optical
+    /// correction for a play triangle (its own centroid sits left of a symmetric
+    /// bounding box, which reads as off-center otherwise).
+    private func playGlyphPath(in rect: CGRect) -> CGPath {
+        let triHeight = rect.height * 0.46
+        let triWidth = triHeight * 0.86
+        let opticalNudge = triWidth * 0.12
+        let left = rect.midX - triWidth / 2 + opticalNudge
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: left, y: rect.midY - triHeight / 2))
+        path.addLine(to: CGPoint(x: left, y: rect.midY + triHeight / 2))
+        path.addLine(to: CGPoint(x: left + triWidth, y: rect.midY))
+        path.closeSubpath()
+        return path
     }
 
     // MARK: Eyes/mouth — box position/size/path/color change only on an emotion swap;

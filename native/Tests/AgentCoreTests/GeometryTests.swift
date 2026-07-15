@@ -129,4 +129,34 @@ struct GeometryTests {
         #expect(hitX == false)
         #expect(hitY == false)
     }
+
+    // MARK: moveToward
+
+    @Test func moveToward_farFromTarget_stepsByExactlyMaxDistance() {
+        let next = moveToward(Point(x: 0, y: 0), Point(x: 100, y: 0), maxDistance: 30)
+        #expect(abs(next.x - 30) < 1e-9)
+        #expect(next.y == 0)
+    }
+
+    @Test func moveToward_withinMaxDistanceOfTarget_snapsExactlyToTarget() {
+        let next = moveToward(Point(x: 95, y: 0), Point(x: 100, y: 0), maxDistance: 30)
+        #expect(next == Point(x: 100, y: 0))
+    }
+
+    @Test func moveToward_alreadyAtTarget_staysAtTarget() {
+        let next = moveToward(Point(x: 100, y: 0), Point(x: 100, y: 0), maxDistance: 30)
+        #expect(next == Point(x: 100, y: 0))
+    }
+
+    @Test func moveToward_diagonalTarget_movesAlongTheStraightLine() {
+        // 3-4-5 triangle: distance is 5, so a maxDistance of 2.5 covers exactly half.
+        let next = moveToward(Point(x: 0, y: 0), Point(x: 3, y: 4), maxDistance: 2.5)
+        #expect(abs(next.x - 1.5) < 1e-9)
+        #expect(abs(next.y - 2.0) < 1e-9)
+    }
+
+    @Test func moveToward_zeroMaxDistance_doesNotMove() {
+        let next = moveToward(Point(x: 10, y: 10), Point(x: 100, y: 100), maxDistance: 0)
+        #expect(next == Point(x: 10, y: 10))
+    }
 }

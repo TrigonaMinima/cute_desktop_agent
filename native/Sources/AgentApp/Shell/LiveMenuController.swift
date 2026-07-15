@@ -26,11 +26,12 @@ public final class LiveMenuController: NSObject, NSMenuDelegate {
 
     public let menu = NSMenu()
     private let summaryProvider: () -> StatusSummary
-    // Also the retain point for the Brain/Temperament submenus' action targets —
+    // Also the retain point for the Brain/Temperament/Timer submenus' action targets —
     // NSMenuItem.target is weak.
     private let brain: BrainMenuController
     private let launchAtLogin: LaunchAtLoginController?
     private let temperament: TemperamentMenuController
+    private let timer: TimerMenuController
     private var rowItems: [NSMenuItem] = []
     private var isOpen = false
     private var lastRefreshAt: Double?
@@ -39,12 +40,14 @@ public final class LiveMenuController: NSObject, NSMenuDelegate {
         summaryProvider: @escaping () -> StatusSummary,
         brain: BrainMenuController,
         temperament: TemperamentMenuController,
+        timer: TimerMenuController,
         launchAtLogin: LaunchAtLoginController? = nil
     ) {
         self.summaryProvider = summaryProvider
         self.brain = brain
         self.launchAtLogin = launchAtLogin
         self.temperament = temperament
+        self.timer = timer
         super.init()
         menu.delegate = self
     }
@@ -52,7 +55,7 @@ public final class LiveMenuController: NSObject, NSMenuDelegate {
     public func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let built = StatusMenuBuilder.build(
-            for: summaryProvider(), brain: brain, temperament: temperament, launchAtLogin: launchAtLogin
+            for: summaryProvider(), brain: brain, temperament: temperament, timer: timer, launchAtLogin: launchAtLogin
         )
         for item in built.items {
             menu.addItem(item)

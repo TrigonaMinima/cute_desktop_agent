@@ -239,6 +239,60 @@ struct StatusSummaryTests {
         #expect(state.statusSummary(now: 1_000).row(section: "Memory", label: "Yield cooldown") == "in 4.0s")
     }
 
+    // MARK: - Timer section (present only when state.timer != nil)
+
+    @Test func timer_nil_noTimerSection() {
+        let state = Self.populatedState(timer: nil)
+        let titles = state.statusSummary(now: 0).sections.map(\.title)
+        #expect(!titles.contains("Timer"))
+    }
+
+    @Test func timer_present_addsTimerSection() {
+        let state = Self.populatedState(
+            timer: TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        )
+        let titles = state.statusSummary(now: 0).sections.map(\.title)
+        #expect(titles.contains("Timer"))
+    }
+
+    @Test func timer_running_stateRowDisplaysRunning() {
+        let state = Self.populatedState(
+            timer: TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        )
+        #expect(state.statusSummary(now: 0).row(section: "Timer", label: "State") == "Running")
+    }
+
+    @Test func timer_paused_stateRowDisplaysPaused() {
+        let state = Self.populatedState(
+            timer: TimerState(active: true, running: false, durationMs: 60_000, elapsedMs: 0)
+        )
+        #expect(state.statusSummary(now: 0).row(section: "Timer", label: "State") == "Paused")
+    }
+
+    @Test func timer_remainingRow_matchesRemainingString() {
+        let timer = TimerState(active: true, running: true, durationMs: 25 * 60_000, elapsedMs: 2_000)
+        let state = Self.populatedState(timer: timer)
+        #expect(state.statusSummary(now: 0).row(section: "Timer", label: "Remaining") == "24:58")
+    }
+
+    @Test func timer_totalRow_matchesTotalString() {
+        let timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 90_000)
+        let state = Self.populatedState(timer: timer)
+        #expect(state.statusSummary(now: 0).row(section: "Timer", label: "Total") == "01:30")
+    }
+
+    @Test func timer_notOvertime_overtimeRowDisplaysNo() {
+        let timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        let state = Self.populatedState(timer: timer)
+        #expect(state.statusSummary(now: 0).row(section: "Timer", label: "Overtime") == "no")
+    }
+
+    @Test func timer_overtime_overtimeRowDisplaysYes() {
+        let timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 65_000)
+        let state = Self.populatedState(timer: timer)
+        #expect(state.statusSummary(now: 0).row(section: "Timer", label: "Overtime") == "yes")
+    }
+
     // MARK: - Deterministic overall shape
 
     @Test func summary_hasBodyWorldMemorySections_inThatOrder() {
@@ -293,7 +347,8 @@ struct StatusSummaryTests {
         quirkEmotion: Emotion? = nil,
         proximityCooldownUntil: Double = 0,
         attentionZone: Rect? = nil,
-        yieldCooldownUntil: Double = 0
+        yieldCooldownUntil: Double = 0,
+        timer: TimerState? = nil
     ) -> AgentState {
         AgentState(
             world: AgentWorld(
@@ -310,7 +365,8 @@ struct StatusSummaryTests {
                 nextBlinkAt: nextBlinkAt, blinking: blinking, blinkEndsAt: 0, quirkEmotion: quirkEmotion,
                 quirkUntil: 0, nextQuirkAt: 0, proximityUntil: 0, proximityCooldownUntil: proximityCooldownUntil,
                 yieldCooldownUntil: yieldCooldownUntil
-            )
+            ),
+            timer: timer
         )
     }
 }

@@ -27,15 +27,17 @@ public final class StateMachine {
     }
 
     /// One frame: advance movement/mode/happy-resume (unless dragging, which owns
-    /// position itself via `updateDrag`), then blink and emotion — both of which keep
-    /// running even mid-drag, matching the JS original's unconditional tail of `tick()`.
+    /// position itself via `updateDrag`, or an active timer, which pins position the
+    /// same way — see `state.timer`), then blink and emotion — both of which keep
+    /// running even mid-drag/mid-timer, matching the JS original's unconditional tail of
+    /// `tick()`.
     public func tick(state: inout AgentState, dt: Double) {
         let now = clock.now()
         // Net-new, beyond blob.js parity: derive the region to avoid every tick, even
         // while dragging — it's surfaced in the menu/status rows regardless, and
         // `maybeYield` below is what actually gates the reaction on not-dragging.
         state.body.attentionZone = attentionZone(from: state.world)
-        if !state.body.dragging {
+        if !state.body.dragging && !(state.timer?.active == true) {
             reconcilePosition(state: &state)
             updateHappy(state: &state, now: now)
             maybeYield(state: &state, now: now)

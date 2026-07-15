@@ -77,9 +77,12 @@ public final class EmergentBrain {
         // Derived belief the menus surface regardless of what the body is doing.
         state.body.attentionZone = attentionZone(from: state.world)
 
-        if state.body.dragging {
-            // The user's hand owns position (see updateDrag); perception-side systems
-            // keep running so the eyes and face stay alive in the grip.
+        if state.body.dragging || state.timer?.active == true {
+            // Something outside the brain owns position — the user's hand (see
+            // updateDrag), or the shell's timer pin (start's top-right corner, or
+            // wherever the user last dragged it while timing). Either way it must stay
+            // put — no steering, no locomotion — while perception-side systems keep
+            // running so the eyes and face stay alive.
             mind.physics.position = state.body.position
             mind.physics.velocity = Vector(dx: 0, dy: 0)
             updateGaze(state: state, mind: &mind, now: now, dt: dt)

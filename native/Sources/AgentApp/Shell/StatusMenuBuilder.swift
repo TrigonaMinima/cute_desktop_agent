@@ -16,6 +16,10 @@ enum StatusMenuBuilder {
 
     /// - Parameter brain: the "Brain" submenu, pinned as the very first item ahead of a
     ///   separator — both brains always support switching, so this is never omitted (D21).
+    /// - Parameter timer: the "Timer" submenu, pinned right after Brain — always present
+    ///   (a timer can be started/ended regardless of which brain is live), its contents
+    ///   swap between presets/Custom… and Pause-Resume/End based on whether a timer is
+    ///   active at open time (see `TimerMenuController`).
     /// - Parameter launchAtLogin: when non-nil, a "Launch at Login" toggle is inserted
     ///   between the state rows and Quit, sharing the trailing separator. `nil` omits it
     ///   entirely.
@@ -29,17 +33,18 @@ enum StatusMenuBuilder {
         for summary: StatusSummary,
         brain: BrainMenuController,
         temperament: TemperamentMenuController,
+        timer: TimerMenuController,
         launchAtLogin: LaunchAtLoginController? = nil
     ) -> Built {
         // `rowItems` is built by walking sections/rows in the same nested order as
         // `orderedRows(for:)` below (by construction: both are just `sections` then each
         // section's `rows`) — that shared order is what lets a live refresh `zip` these
-        // items against `rowTitles(for:)`'s output. The Brain item and the login-item
-        // toggle below are deliberately NOT added to `rowItems`: their content only
-        // changes across menu opens (a brain swap or login registration change closes
-        // the menu first), not per-frame state, so neither needs `refreshIfOpen`'s
-        // per-frame title push.
-        var items: [NSMenuItem] = [brain.menuItem(), .separator()]
+        // items against `rowTitles(for:)`'s output. The Brain/Timer items and the
+        // login-item toggle below are deliberately NOT added to `rowItems`: their content
+        // only changes across menu opens (a brain swap, a timer start/end, or a login
+        // registration change closes the menu first), not per-frame state, so none of
+        // them needs `refreshIfOpen`'s per-frame title push.
+        var items: [NSMenuItem] = [brain.menuItem(), timer.menuItem(), .separator()]
         var rowItems: [NSMenuItem] = []
         for section in summary.sections {
             items.append(.sectionHeader(title: section.title))

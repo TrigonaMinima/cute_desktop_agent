@@ -448,6 +448,44 @@ struct StateMachineTransitionTests {
         #expect(state.body.emotion == .sleepy)
     }
 
+    // MARK: - tick: an active timer freezes movement the same way dragging does.
+
+    @Test func tick_timerActive_skipsMovement_butStillBlinks() {
+        let sm = StateMachine(rng: SeededRandom(seed: 2), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .wander, position: Point(x: 0, y: 0))
+        state.body.target = Point(x: 500, y: 0)
+        state.body.moving = true
+        state.timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        state.memory.nextBlinkAt = 999
+        sm.tick(state: &state, dt: 1.0)
+        #expect(state.body.position == Point(x: 0, y: 0))
+        #expect(state.body.moving == true)
+        #expect(state.memory.blinking == true)
+    }
+
+    @Test func tick_timerInactive_movesNormally() {
+        // Sanity check the guard's other branch: no timer, no drag -> movement proceeds.
+        let sm = StateMachine(rng: SeededRandom(seed: 2), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .wander, position: Point(x: 0, y: 0))
+        state.body.target = Point(x: 500, y: 0)
+        state.body.moving = true
+        sm.tick(state: &state, dt: 1.0)
+        #expect(state.body.position != Point(x: 0, y: 0))
+    }
+
+    @Test func tick_timerActive_dragStillMovesPosition() {
+        // Drag must keep working while a timer is active — the user can reposition
+        // Jiggy and it stays wherever dropped.
+        let sm = StateMachine(rng: SeededRandom(seed: 2), clock: ManualClock(start: 1000))
+        var state = TestFixtures.makeState(mode: .idle, position: Point(x: 0, y: 0))
+        state.timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        state.world.cursor = Point(x: 0, y: 0)
+        sm.beginDrag(state: &state)
+        state.world.cursor = Point(x: 120, y: 60)
+        sm.updateDrag(state: &state)
+        #expect(state.body.position == Point(x: 120, y: 60))
+    }
+
     // MARK: - maybeYield: reactive attention-avoidance (net-new, beyond blob.js parity —
     // see Behavior/Attention.swift, Math/Avoidance.swift). Unlike the functions above,
     // these set `state.body.attentionZone` directly rather than deriving it from

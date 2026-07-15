@@ -169,17 +169,24 @@ public struct AgentState: Codable, Equatable {
     /// `EmergentBrain`. `nil` whenever the classic `StateMachine` is driving, so the
     /// classic path's state shape (and its parity tests) are untouched.
     public var mind: MindState?
+    /// The active timer's read-only snapshot, written once per tick by `AgentApp`'s
+    /// `TimerController` via `applyTimer(now:)` — mirrors how `Perception` writes `world`.
+    /// Brains read `timer?.active` to freeze movement/locomotion (like `body.dragging`);
+    /// the renderer and `StatusSummary` read it to display the row. `nil` when no timer
+    /// has ever been started this session.
+    public var timer: TimerState?
     /// Open extension bag for future signals. Empty today; no consumer reads it yet.
     public var context: [String: JSONValue]
 
     public init(
         world: AgentWorld, body: AgentBody, memory: AgentMemory,
-        mind: MindState? = nil, context: [String: JSONValue] = [:]
+        mind: MindState? = nil, timer: TimerState? = nil, context: [String: JSONValue] = [:]
     ) {
         self.world = world
         self.body = body
         self.memory = memory
         self.mind = mind
+        self.timer = timer
         self.context = context
     }
 

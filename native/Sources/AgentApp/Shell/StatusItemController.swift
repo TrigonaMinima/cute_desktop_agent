@@ -16,9 +16,11 @@ public final class StatusItemController: NSObject {
     ///   this type's.
     /// - Parameter brain: forwarded straight through to the underlying `LiveMenuController`
     ///   for the "Brain" submenu pinned as this dropdown's first item — see
-    ///   `StatusMenuBuilder.build(for:brain:temperament:launchAtLogin:)`.
+    ///   `StatusMenuBuilder.build(for:brain:temperament:timer:launchAtLogin:)`.
     /// - Parameter temperament: forwarded the same way for the "Temperament" preset
     ///   submenu row (nil when unavailable — see its doc comment).
+    /// - Parameter timer: forwarded the same way for the "Timer" submenu row, pinned
+    ///   right after Brain.
     /// - Parameter launchAtLogin: forwarded straight through to the underlying
     ///   `LiveMenuController` so the "Launch at Login" row shows up in this dropdown too.
     public init(
@@ -26,13 +28,14 @@ public final class StatusItemController: NSObject {
         summaryProvider: @escaping () -> StatusSummary,
         brain: BrainMenuController,
         temperament: TemperamentMenuController,
+        timer: TimerMenuController,
         launchAtLogin: LaunchAtLoginController? = nil
     ) {
         // .variableLength, not .squareLength — the latter is sized for an icon-only
         // button and clips a text/emoji title.
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         liveMenu = LiveMenuController(
-            summaryProvider: summaryProvider, brain: brain, temperament: temperament,
+            summaryProvider: summaryProvider, brain: brain, temperament: temperament, timer: timer,
             launchAtLogin: launchAtLogin
         )
         super.init()

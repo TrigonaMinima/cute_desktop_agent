@@ -48,8 +48,10 @@ extension StateMachine: AgentBrain {}
 
 extension EmergentBrain: AgentBrain, TemperamentControlling {
     /// Sleep is the power ladder's bottom tier — the brain has already committed the
-    /// rest pose by the time it reports `.sleeping` (see `runCognition`).
+    /// rest pose by the time it reports `.sleeping` (see `runCognition`). An active timer
+    /// vetoes sleep even at that tier — the shell must keep the frame clock running so
+    /// the on-screen row keeps counting and the pause button stays clickable.
     public func wantsRuntimeSleep(state: AgentState) -> Bool {
-        state.mind?.power == .sleeping
+        state.mind?.power == .sleeping && state.timer?.active != true
     }
 }

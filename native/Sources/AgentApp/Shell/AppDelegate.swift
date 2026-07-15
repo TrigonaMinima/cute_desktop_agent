@@ -29,6 +29,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var perception = Perception(clock: clock)
     // See `LaunchAtLoginController`'s doc comment for why this must be a stored property.
     private let launchAtLogin = LaunchAtLoginController()
+    /// Canonical timer data — see its own doc comment. Owned here (not per-brain, not
+    /// rebuilt by `switchBrain`) so the timer survives a live brain swap for free.
+    private let timerController = TimerController()
+    /// Set for the duration of a mouse-down that landed on the on-screen pause button,
+    /// so the matching drag/up callbacks don't also start/end a drag (see `wireDrag`).
+    private var suppressDrag = false
+    /// Non-nil while `body.position` is being animated toward the timer's pin corner
+    /// (see `startTimer`/`advanceTimerPin`) — cleared on arrival, on a drag starting
+    /// mid-travel, or on `endTimer`, whichever comes first.
+    private var timerPinTarget: Point?
 
     /// Kept past launch (unlike every other launch-time local) because a display-change
     /// rebuild needs to make fresh `Avatar` instances — layer trees can't be shared
@@ -94,6 +104,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let brainMenu = makeBrainMenu()
         let temperamentMenu = makeTemperamentMenu()
+        let timerMenu = makeTimerMenu()
 
         // One provider shared by both menu surfaces (status-item dropdown + avatar
         // right-click) so their live refresh reads the identical snapshot rule by
@@ -103,9 +114,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let statusItemController = StatusItemController(
             title: config.statusItemTitle, summaryProvider: summaryProvider, brain: brainMenu,
-            temperament: temperamentMenu, launchAtLogin: launchAtLogin)
+            temperament: temperamentMenu, timer: timerMenu, launchAtLogin: launchAtLogin)
         let contextMenu = LiveMenuController(
-            summaryProvider: summaryProvider, brain: brainMenu, temperament: temperamentMenu,
+            summaryProvider: summaryProvider, brain: brainMenu, temperament: temperamentMenu, timer: timerMenu,
             launchAtLogin: launchAtLogin)
 
         // Forces `perception`'s lazy init now — its Accessibility prompt + global keydown
@@ -279,13 +290,85 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// The per-frame driver `FrameClock` calls: poll perception, advance the brain,
-    /// render every panel, refresh hit-testing, then push the live menus — in that
-    /// order (mirrors the POC's `tick()`; see AgentCore's `StateMachine.tick` doc
-    /// comment for why blink/emotion must run even mid-drag).
+    /// The "Timer" submenu's controller. Constructed unconditionally, like `Brain` — a
+    /// timer can be started/ended regardless of which brain is live. Reads
+    /// `timerController.active` directly (not `state.timer`) so the menu's Start/End
+    /// split reflects reality even on the very first open, before any tick has run
+    /// `applyTimer` to populate `state.timer`.
+    private func makeTimerMenu() -> TimerMenuController {
+        TimerMenuController(
+            isActive: { [weak self] in self?.timerController.active ?? false },
+            isRunning: { [weak self] in self?.state?.timer?.running ?? false },
+            onStart: { [weak self] durationMs in self?.startTimer(durationMs: durationMs) },
+            onEnd: { [weak self] in self?.endTimer() },
+            onTogglePause: { [weak self] in self?.toggleTimerPause() }
+        )
+    }
+
+    /// Starts a new timer: wakes the shell first if it was asleep (the dropdown/on-screen
+    /// button are both dead with the frame clock stopped), sets `timerPinTarget` to the
+    /// top-right corner of the avatar's current screen's visible frame — offset down by
+    /// `timerRowClearance` so the label row above it, not the avatar itself, is what
+    /// clears the menu bar — then starts the controller. `body.position` itself is left
+    /// untouched here; `advanceTimerPin` hurries it to that corner over the next few
+    /// frames rather than teleporting it there. Both brains freeze in place (wherever
+    /// `body.position` currently is, corner or mid-travel) on their very next `tick` once
+    /// `applyTimer` writes `state.timer.active == true`.
+    private func startTimer(durationMs: Double) {
+        if dormant { wakeFromSleep() }
+        let screenIndex = nearestScreenIndex(to: state.body.position, screens: state.world.screens)
+        let screenRect = state.world.screens[screenIndex].frame
+        let size = state.body.size
+        // The label row is left-aligned with `position.x` and extends further right than
+        // the avatar itself (button+remaining+total, see `timerRowWidth`) — pinning by the
+        // avatar's own width alone would leave the row's remaining/total slots rendering
+        // past the screen's right edge.
+        let pinWidth = max(size.width, timerRowWidth)
+        timerPinTarget = Point(
+            x: screenRect.origin.x + screenRect.size.width - pinWidth,
+            y: screenRect.origin.y + timerRowClearance
+        )
+        timerController.start(durationMs: durationMs, now: clock.now())
+    }
+
+    /// Ends the active timer. The freeze lifts on the next tick (`applyTimer` writes
+    /// `state.timer = nil`) and both brains resume wandering from wherever the avatar
+    /// currently sits — no explicit "resume" call needed. Also cancels any in-flight
+    /// pin travel, so ending mid-hop doesn't leave a stale target for a later timer to
+    /// stumble over.
+    private func endTimer() {
+        timerController.end()
+        timerPinTarget = nil
+    }
+
+    /// Steps `body.position` toward `timerPinTarget` at `timerPinTravelSpeedPxPerSecond`,
+    /// clearing the target on arrival. Runs before `brain.tick` each frame, so the
+    /// freeze branch (which just pins to whatever `body.position` already is) rides
+    /// along frame-by-frame instead of needing to know travel is happening. A drag
+    /// starting mid-travel (`wireDrag`) clears `timerPinTarget` itself — this only needs
+    /// to stay out of the way once dragging is underway, which `state.body.dragging`
+    /// already covers between mouse-down and the drag actually clearing the target.
+    private func advanceTimerPin(dt: Double) {
+        guard let target = timerPinTarget, !state.body.dragging else { return }
+        state.body.position = moveToward(state.body.position, target, maxDistance: timerPinTravelSpeedPxPerSecond * dt)
+        if state.body.position == target {
+            timerPinTarget = nil
+        }
+    }
+
+    private func toggleTimerPause() {
+        timerController.togglePause(now: clock.now())
+    }
+
+    /// The per-frame driver `FrameClock` calls: poll perception, step any in-flight
+    /// timer-pin travel, advance the brain, render every panel, refresh hit-testing, then
+    /// push the live menus — in that order (mirrors the POC's `tick()`; see AgentCore's
+    /// `StateMachine.tick` doc comment for why blink/emotion must run even mid-drag).
     private func tick(now: Double, dt: Double) {
         guard let runtime else { return }
         applyPerception(dt: dt, layout: runtime.layout)
+        advanceTimerPin(dt: dt)
+        applyTimer(now: now)
         brain.tick(state: &state, dt: dt)
         // Squash/bob is panel-invariant — compute once, share across every panel's render.
         let motion = computeBodyMotion(state: state, now: now)
@@ -326,6 +409,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         state.world.apply(snapshot)
     }
 
+    /// Writes this frame's read-only timer snapshot into `state.timer` — the timer
+    /// analog of `applyPerception`, single-writer discipline preserved (see
+    /// `AgentState.timer`'s doc comment). Runs before `brain.tick` so the freeze branch
+    /// in both brains sees this frame's `active`/`running` values, not last frame's.
+    private func applyTimer(now: Double) {
+        state.timer = timerController.snapshot(now: now)
+    }
+
     /// Pushes this frame's state into both live menu surfaces. No-ops unless their menu
     /// is currently open — see `LiveMenuController`'s doc comment for why a per-frame
     /// push (rather than a `menuWillOpen`-scoped Timer) is what keeps an open menu's
@@ -356,16 +447,33 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func wireDrag(_ avatarView: AvatarView) {
         avatarView.onMouseDown = { [weak self] point in
             guard let self else { return }
-            self.state.world.cursor = Point(x: Double(point.x), y: Double(point.y))
+            let cursor = Point(x: Double(point.x), y: Double(point.y))
+            // A tap on the on-screen play/pause button toggles pause instead of starting
+            // a drag — checked before falling through to the normal beginDrag path, and
+            // only while a timer is actually active (the button doesn't exist otherwise).
+            if self.state.timer?.active == true,
+               isWithin(point: cursor, rect: timerControlRect(position: self.state.body.position, size: self.state.body.size)) {
+                self.toggleTimerPause()
+                self.suppressDrag = true
+                return
+            }
+            // A real drag starting mid-hop-to-corner takes over position outright — don't
+            // let the pin travel resume fighting the user's hand once it lets go.
+            self.timerPinTarget = nil
+            self.state.world.cursor = cursor
             self.brain.beginDrag(state: &self.state)
         }
         avatarView.onMouseDragged = { [weak self] point in
-            guard let self else { return }
+            guard let self, !self.suppressDrag else { return }
             self.state.world.cursor = Point(x: Double(point.x), y: Double(point.y))
             self.brain.updateDrag(state: &self.state)
         }
         avatarView.onMouseUp = { [weak self] in
             guard let self else { return }
+            guard !self.suppressDrag else {
+                self.suppressDrag = false
+                return
+            }
             self.brain.endDrag(state: &self.state, now: self.clock.now())
         }
     }
@@ -400,10 +508,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // edge), which is harmless: AppKit keeps routing the drag to the mouse-down window.
 
     private func updateHitTest(panels: [ScreenPanel]) {
-        let hovering = AgentCore.isHovering(cursor: state.world.cursor, position: state.body.position, size: state.body.size)
-        let avatarRect = Rect(origin: state.body.position, size: state.body.size)
+        // While a timer is active, the hit-testable region widens to the whole row
+        // (button + digits) above the avatar, not just the avatar's own box — otherwise
+        // the on-screen button sits in permanently-click-through space and can never be
+        // tapped. `isWithin` and `isHovering` are equivalent (both-edges-inclusive)
+        // point-in-rect checks, so this single call covers both cases correctly.
+        let interactiveRect = state.timer?.active == true
+            ? timerInteractiveRect(position: state.body.position, size: state.body.size)
+            : Rect(origin: state.body.position, size: state.body.size)
+        let hovering = isWithin(point: state.world.cursor, rect: interactiveRect)
         for screenPanel in panels {
-            let onThisDisplay = rectsOverlap(avatarRect, screenPanel.display.fullFrameWeb)
+            let onThisDisplay = rectsOverlap(interactiveRect, screenPanel.display.fullFrameWeb)
             let wantsEvents = (state.body.dragging || hovering) && onThisDisplay
             if wantsEvents == !screenPanel.panel.ignoresMouseEvents { continue }
             screenPanel.panel.ignoresMouseEvents = !wantsEvents

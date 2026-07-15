@@ -21,6 +21,17 @@ public func distance(_ a: Point, _ b: Point) -> Double {
     distance(ax: a.x, ay: a.y, bx: b.x, by: b.y)
 }
 
+/// Steps `current` toward `target` by at most `maxDistance`, snapping exactly onto
+/// `target` (rather than overshooting and oscillating past it) once within that
+/// distance — the per-frame primitive behind any "hurry to a point" motion that isn't
+/// routed through the full steering system, e.g. the timer's pin-to-corner travel.
+public func moveToward(_ current: Point, _ target: Point, maxDistance: Double) -> Point {
+    let d = distance(current, target)
+    guard d > maxDistance else { return target }
+    let t = maxDistance / d
+    return Point(x: lerp(current.x, target.x, t), y: lerp(current.y, target.y, t))
+}
+
 /// Center of a rect — the single definition of `origin + size/2`, so gaze, situation,
 /// and body-center math never re-derive it inline.
 public func center(of rect: Rect) -> Point {

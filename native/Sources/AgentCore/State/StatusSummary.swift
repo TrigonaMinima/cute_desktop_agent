@@ -77,6 +77,9 @@ public extension AgentState {
         if let mind {
             sections.append(StatusSummary.mindSection(for: mind, now: now))
         }
+        if let timer {
+            sections.append(StatusSummary.timerSection(for: timer))
+        }
         return StatusSummary(sections: sections)
     }
 }
@@ -104,6 +107,18 @@ private extension StatusSummary {
             .init(label: "Gaze", value: formatGaze(mind.gaze)),
             .init(label: "Reflex", value: formatReflex(mind.reflex, now: now)),
             .init(label: "Habituation peak", value: formatHabituationPeak(mind.habituation)),
+        ])
+    }
+
+    /// Present only when `state.timer != nil` — a stopped/never-started timer surfaces no
+    /// section at all (project rule: any new state attribute shows up on both menu
+    /// surfaces automatically once it's here).
+    static func timerSection(for timer: TimerState) -> Section {
+        Section(title: "Timer", rows: [
+            .init(label: "State", value: timer.running ? "Running" : "Paused"),
+            .init(label: "Remaining", value: timer.remainingString),
+            .init(label: "Total", value: timer.totalString),
+            .init(label: "Overtime", value: yesNo(timer.isOvertime)),
         ])
     }
 

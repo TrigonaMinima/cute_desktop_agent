@@ -224,6 +224,57 @@ struct EmergentBrainTests {
         #expect(state.mind!.drives.comfort > comfortBefore)
     }
 
+    // MARK: Timer freeze (state.timer?.active pins position like the dragging branch)
+
+    @Test func tick_timerActive_holdsPositionAcrossManyFrames() {
+        let clock = ManualClock()
+        var (brain, state) = makeBooted(clock: clock)
+        let start = state.body.position
+        state.timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        step(brain, &state, clock: clock, frames: 240) // 4s — long enough to wander if unfrozen
+        #expect(distance(state.body.position, start) < 1)
+        #expect(!state.body.moving)
+    }
+
+    @Test func tick_timerActive_stillBlinks() {
+        let clock = ManualClock()
+        var (brain, state) = makeBooted(clock: clock)
+        state.timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        state.memory.nextBlinkAt = 0
+        step(brain, &state, clock: clock, frames: 1)
+        #expect(state.memory.blinking)
+    }
+
+    @Test func tick_timerActive_dragStillMovesPosition() {
+        // Drag must keep working while a timer is active — the user can reposition
+        // Jiggy and it stays wherever dropped.
+        let clock = ManualClock()
+        var (brain, state) = makeBooted(clock: clock)
+        state.timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        state.world.cursor = state.body.position
+        brain.beginDrag(state: &state)
+        state.world.cursor = Point(x: state.body.position.x + 100, y: state.body.position.y + 50)
+        brain.updateDrag(state: &state)
+        #expect(state.body.position == Point(x: state.world.cursor.x, y: state.world.cursor.y))
+    }
+
+    @Test func wantsRuntimeSleep_falseWhileTimerActive_evenAtPowerSleeping() {
+        let clock = ManualClock()
+        let (brain, state0) = makeBooted(clock: clock)
+        var state = state0
+        state.mind?.power = .sleeping
+        state.timer = TimerState(active: true, running: true, durationMs: 60_000, elapsedMs: 0)
+        #expect(!brain.wantsRuntimeSleep(state: state))
+    }
+
+    @Test func wantsRuntimeSleep_trueWhenTimerInactiveAndPowerSleeping() {
+        let clock = ManualClock()
+        let (brain, state0) = makeBooted(clock: clock)
+        var state = state0
+        state.mind?.power = .sleeping
+        #expect(brain.wantsRuntimeSleep(state: state))
+    }
+
     // MARK: Shared habituation store (Brain-owned recovery)
 
     @Test func tick_unattendedHabituation_recoversOverTime() {
